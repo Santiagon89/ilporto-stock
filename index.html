@@ -918,17 +918,39 @@ const GS_SHEET_ID = '1crtIXfAGY2TkUkEoU3w2fXeBDq13vXpiZJo23Vl3fB0';
 // Despachos array separado
 let DATA_despachos = [];
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
+// ── Helpers — JSONP para evitar CORS con Google Apps Script ──────────────────
 function gsGet(table) {
-  return fetch(GS_URL + '?sheetId=' + GS_SHEET_ID + '&table=' + table)
-    .then(function(r){ return r.json(); })
-    .catch(function(){ return []; });
+  return new Promise(function(resolve) {
+    var cbName = 'gs_cb_' + Date.now();
+    var script = document.createElement('script');
+    var timeout = setTimeout(function() {
+      delete window[cbName];
+      document.body.removeChild(script);
+      resolve([]);
+    }, 8000);
+    window[cbName] = function(data) {
+      clearTimeout(timeout);
+      delete window[cbName];
+      try { document.body.removeChild(script); } catch(e) {}
+      resolve(data);
+    };
+    script.src = GS_URL + '?sheetId=' + GS_SHEET_ID + '&table=' + table + '&callback=' + cbName;
+    script.onerror = function() {
+      clearTimeout(timeout);
+      delete window[cbName];
+      resolve([]);
+    };
+    document.body.appendChild(script);
+  });
 }
 
 function gsPost(table, rowObj) {
   var row = Object.keys(rowObj).map(function(k){ return {key:k, value:rowObj[k]}; });
+  // Use no-cors for POST (fire and forget)
   return fetch(GS_URL, {
     method: 'POST',
+    mode: 'no-cors',
+    headers: {'Content-Type': 'text/plain'},
     body: JSON.stringify({sheetId: GS_SHEET_ID, table: table, action: 'write', row: row})
   }).catch(function(e){ console.error('gsPost error:', e); });
 }
