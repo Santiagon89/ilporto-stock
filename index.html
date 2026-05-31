@@ -878,8 +878,6 @@ const LOC_NAMES  = {fabrica:'Fábrica',puerto:'Puerto',labarra:'La Barra',gorler
 const LOC_ICONS  = {fabrica:'🏭',puerto:'⚓',labarra:'🍹',gorlero:'🌊'};
 const LOC_COLORS = {fabrica:'#00e5b4',puerto:'#ff7043',labarra:'#448aff',gorlero:'#ffd740'};
 const LOC_CLS    = {fabrica:'lc-fab',puerto:'lc-pue',labarra:'lc-bar',gorlero:'lc-gor'};
-const LOC_COLORS = {fabrica:'var(--c1)',puerto:'var(--c2)',labarra:'var(--c3)',gorlero:'var(--c4)'};
-const LOC_CLS = {fabrica:'lc-fab',puerto:'lc-pue',labarra:'lc-bar',gorlero:'lc-gor'};
 
 // ── ESTADO ────────────────────────────────────────────────────────────────────
 function defaultState() {
@@ -1545,22 +1543,29 @@ function resetAll() {
 }
 
 function resetParaPiloto() {
-  if(!confirm('¿Iniciar prueba piloto?\n\n✅ Se conserva: usuarios, artículos, configuración\n🗑 Se borra: stock de todos los locales, historial, despachos')) return;
-  // Reset stock a 0 en todos los locales, preservar articulos
-  const arts = JSON.parse(JSON.stringify(articulos));
-  const allCodes = Object.keys(state[LOCS[0]].stock);
-  LOCS.forEach(loc => {
-    allCodes.forEach(c => {
+  if(!confirm('¿Iniciar prueba piloto?\n\n✅ Se conserva: artículos y configuración\n🗑 Se borra: stock, historial y despachos')) return;
+  // Reset local state
+  var arts = JSON.parse(JSON.stringify(articulos));
+  LOCS.forEach(function(loc) {
+    Object.keys(state[loc].stock).forEach(function(c) {
       state[loc].stock[c] = {bachas:0, baldes:0, kg_bachas:0, kg_baldes:0};
     });
     state[loc].history = [];
   });
   globalHistory = [];
+  DATA_despachos = [];
   articulos = arts;
   save();
-  renderAll();
-  renderSystemInfo();
-  toast('✅ Todos los stocks en 0 — listo para cargar inventario real', 'ok');
+  // Clear Firebase
+  fbSet('stock', {}).then(function() {
+    fbSet('historial', {}).then(function() {
+      fbSet('despachos', {}).then(function() {
+        renderAll();
+        renderSystemInfo();
+        toast('✅ Todos los stocks en 0 — listo para cargar inventario real', 'ok');
+      });
+    });
+  });
 }
 
 function renderSystemInfo() {
