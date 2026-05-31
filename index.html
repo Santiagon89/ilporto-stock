@@ -1586,7 +1586,6 @@ updateClock(); setInterval(updateClock,1000);
 
 // Auto-refresh cada 15 segundos
 setInterval(async function(){
-  if(typeof SESSION==="undefined"||!SESSION)return;
   try{
     var sd=await fbGet("stock");
     if(sd){Object.keys(sd).forEach(function(loc){if(!state[loc])return;Object.keys(sd[loc]).forEach(function(cod){state[loc].stock[cod]=sd[loc][cod];});});}
