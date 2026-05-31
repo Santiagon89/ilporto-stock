@@ -33,8 +33,6 @@ nav{position:sticky;top:0;z-index:200;display:flex;align-items:center;height:52p
 .nav-right{display:flex;align-items:center;gap:.6rem;flex-shrink:0}
 .clock{font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--muted2)}
 .pulse{width:7px;height:7px;border-radius:50%;background:var(--grn);box-shadow:0 0 6px var(--grn);animation:pulse 2s infinite}
-.pulse.offline{background:var(--red);box-shadow:0 0 6px var(--red);animation:none}
-.pulse.syncing{background:var(--yel);box-shadow:0 0 6px var(--yel)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
 /* ── LOC TABS ── */
@@ -909,346 +907,61 @@ let state = defaultState();
 let articulos = defaultArticulos();
 let globalHistory = []; // historial unificado de todos los locales
 
-// ══════════════════════════════════════════════════════════════════════════════
 // FIREBASE REALTIME DATABASE
-// ══════════════════════════════════════════════════════════════════════════════
-const FB_DB  = 'https://ilporto-stock-default-rtdb.firebaseio.com';
-
+// FIREBASE REALTIME DATABASE
+const FB_DB = 'https://ilporto-stock-default-rtdb.firebaseio.com';
 var DATA_despachos = [];
-
-// ── REST helpers ──────────────────────────────────────────────────────────────
-function fbUrl(path) {
-  return FB_DB + '/' + path + '.json';
-}
-
-function fbGet(path) {
-  return fetch(fbUrl(path))
-    .then(function(r) { return r.json(); })
-    .catch(function() { return null; });
-}
-
-function fbSet(path, data) {
-  return fetch(fbUrl(path), {
-    method: 'PUT',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(data)
-  }).catch(function(e) { console.error('fbSet error:', e); });
-}
-
-function fbPush(path, data) {
-  return fetch(fbUrl(path), {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(data)
-  }).catch(function(e) { console.error('fbPush error:', e); });
-}
-
-// ── Guardar stock ─────────────────────────────────────────────────────────────
-function saveStock(loc, cod) {
-  var d = (state[loc] && state[loc].stock[cod]) || {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
-  return fbSet('stock/' + loc + '/' + cod, d);
-}
-
-// ── Guardar historial ─────────────────────────────────────────────────────────
-function saveHistorial(entry) {
-  return fbPush('historial', {
-    ts: entry.ts || Date.now(),
-    fecha: entry.fecha || '',
-    hora: entry.hora || '',
-    loc: entry.loc,
-    usuario: entry.usuario || '—',
-    cod: String(entry.cod),
-    tipo: entry.tipo,
-    recip: entry.recip,
-    cant: entry.cant || 1,
-    pesoTotal: entry.pesoTotal || 0,
-    pesoUnit: entry.pesoUnit || 0,
-    nom: entry.nom || ''
-  });
-}
-
-// ── Guardar límites ───────────────────────────────────────────────────────────
-function saveLimitesDB(loc, cod) {
-  var l = (state[loc] && state[loc].limits[String(cod)]) || {min_b:1,max_b:12,min_v:1,max_v:12};
-  return fbSet('limites/' + loc + '/' + cod, l);
-}
-
-// ── Guardar artículo ──────────────────────────────────────────────────────────
-function saveArticuloDB(cod, nombre) {
-  return fbSet('articulos/' + cod, {nombre: nombre||''});
-}
-
-// ── Guardar despacho ──────────────────────────────────────────────────────────
-function saveDespacho(d) {
-  return fbPush('despachos', d);
-}
-
-// ── Cargar TODO desde Firebase ────────────────────────────────────────────────
-async function loadFromDB() {
+function fbUrl(p){return FB_DB+'/'+p+'.json';}
+function fbGet(p){return fetch(fbUrl(p)).then(function(r){return r.json();}).catch(function(){return null;});}
+function fbSet(p,d){return fetch(fbUrl(p),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(function(e){console.error('fbSet:',e);});}
+function fbPush(p,d){return fetch(fbUrl(p),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(function(e){console.error('fbPush:',e);});}
+function saveStock(loc,cod){var d=(state[loc]&&state[loc].stock[cod])||{bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};return fbSet('stock/'+loc+'/'+cod,d);}
+function saveHistorial(h){return fbPush('historial',{ts:h.ts||Date.now(),fecha:h.fecha||'',hora:h.hora||'',loc:h.loc,usuario:h.usuario||'—',cod:String(h.cod),tipo:h.tipo,recip:h.recip,cant:h.cant||1,pesoTotal:h.pesoTotal||0,pesoUnit:h.pesoUnit||0,nom:h.nom||''});}
+function saveLimitesDB(loc,cod){var l=(state[loc]&&state[loc].limits[String(cod)])||{min_b:1,max_b:12,min_v:1,max_v:12};return fbSet('limites/'+loc+'/'+cod,l);}
+function saveArticuloDB(cod,nombre){return fbSet('articulos/'+cod,{nombre:nombre||''});}
+function saveDespacho(d){return fbPush('despachos',d);}
+async function loadFromDB(){
   showLoading(true);
-  try {
-    // Stock
-    var stockData = await fbGet('stock');
-    if(stockData) {
-      Object.keys(stockData).forEach(function(loc) {
-        if(!state[loc]) return;
-        Object.keys(stockData[loc]).forEach(function(cod) {
-          state[loc].stock[cod] = stockData[loc][cod];
-        });
-      });
-    }
-
-    // Límites
-    var limData = await fbGet('limites');
-    if(limData) {
-      Object.keys(limData).forEach(function(loc) {
-        if(!state[loc]) return;
-        Object.keys(limData[loc]).forEach(function(cod) {
-          state[loc].limits[cod] = limData[loc][cod];
-        });
-      });
-    }
-
-    // Artículos
-    var artData = await fbGet('articulos');
-    if(artData) {
-      Object.keys(artData).forEach(function(cod) {
-        articulos[cod] = artData[cod];
-      });
-    }
-
-    // Historial
-    var histData = await fbGet('historial');
-    if(histData) {
-      globalHistory = Object.values(histData)
-        .sort(function(a,b){return b.ts - a.ts;})
-        .slice(0, 500);
-      LOCS.forEach(function(loc) {
-        state[loc].history = globalHistory.filter(function(h){return h.loc===loc;});
-      });
-    }
-
-    // Despachos
-    var despData = await fbGet('despachos');
-    if(despData) {
-      DATA_despachos = Object.values(despData)
-        .sort(function(a,b){return b.ts - a.ts;});
-    }
-
-    // Merge new codes
-    Object.keys(CODES_INIT).forEach(function(c) {
-      LOCS.forEach(function(loc) {
-        if(!state[loc].stock[c]) state[loc].stock[c]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
-        if(!state[loc].limits[c]) state[loc].limits[c]={min_b:1,max_b:12,min_v:1,max_v:12};
-      });
-      if(!articulos[c]) articulos[c]={nombre:''};
-    });
-
+  try{
+    var sd=await fbGet('stock');
+    if(sd){Object.keys(sd).forEach(function(loc){if(!state[loc])return;Object.keys(sd[loc]).forEach(function(cod){state[loc].stock[cod]=sd[loc][cod];});});}
+    var ld=await fbGet('limites');
+    if(ld){Object.keys(ld).forEach(function(loc){if(!state[loc])return;Object.keys(ld[loc]).forEach(function(cod){state[loc].limits[cod]=ld[loc][cod];});});}
+    var ad=await fbGet('articulos');
+    if(ad){Object.keys(ad).forEach(function(cod){articulos[cod]=ad[cod];});}
+    var hd=await fbGet('historial');
+    if(hd){globalHistory=Object.values(hd).sort(function(a,b){return b.ts-a.ts;}).slice(0,500);LOCS.forEach(function(loc){state[loc].history=globalHistory.filter(function(h){return h.loc===loc;});});}
+    var dd=await fbGet('despachos');
+    if(dd){DATA_despachos=Object.values(dd).sort(function(a,b){return b.ts-a.ts;});}
+    Object.keys(CODES_INIT).forEach(function(c){LOCS.forEach(function(loc){if(!state[loc].stock[c])state[loc].stock[c]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};if(!state[loc].limits[c])state[loc].limits[c]={min_b:1,max_b:12,min_v:1,max_v:12};});if(!articulos[c])articulos[c]={nombre:''};});
     setSyncOk(true);
-  } catch(e) {
-    console.error('Error cargando Firebase:', e);
-    setSyncOk(false);
-    toast('Sin conexión — modo offline', 'err');
-    loadFromLocal();
-  }
+  }catch(e){console.error('Firebase:',e);setSyncOk(false);toast('Sin conexión — modo offline','err');loadFromLocal();}
   showLoading(false);
 }
-
-// ── Refresh desde Firebase ────────────────────────────────────────────────────
-async function refreshLoc(loc) {
-  try {
-    var stockData = await fbGet('stock/' + loc);
-    if(stockData && state[loc]) {
-      Object.keys(stockData).forEach(function(cod) {
-        state[loc].stock[cod] = stockData[cod];
-      });
-    }
-    var histData = await fbGet('historial');
-    if(histData) {
-      globalHistory = Object.values(histData)
-        .sort(function(a,b){return b.ts - a.ts;})
-        .slice(0, 500);
-      LOCS.forEach(function(l) {
-        state[l].history = globalHistory.filter(function(h){return h.loc===l;});
-      });
-    }
-    if(loc === curLoc) renderAll();
+async function refreshLoc(loc){
+  try{
+    var sd=await fbGet('stock/'+loc);
+    if(sd&&state[loc]){Object.keys(sd).forEach(function(cod){state[loc].stock[cod]=sd[cod];});}
+    var hd=await fbGet('historial');
+    if(hd){globalHistory=Object.values(hd).sort(function(a,b){return b.ts-a.ts;}).slice(0,500);LOCS.forEach(function(l){state[l].history=globalHistory.filter(function(h){return h.loc===l;});});}
+    if(loc===curLoc)renderAll();
     setSyncOk(true);
-  } catch(e) {
-    console.error('refreshLoc error:', e);
-    setSyncOk(false);
-  }
+  }catch(e){setSyncOk(false);}
 }
+function setSyncOk(ok){var d=document.getElementById('sync-dot');if(!d)return;d.classList.remove('offline','syncing');if(!ok)d.classList.add('offline');}
+function showLoading(show){var el=document.getElementById('loading-overlay');if(!el){el=document.createElement('div');el.id='loading-overlay';el.style.cssText='position:fixed;inset:0;z-index:9998;background:rgba(8,12,20,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem';el.innerHTML='<div style="width:40px;height:40px;border:3px solid #1c2d47;border-top-color:#00e5b4;border-radius:50%;animation:spin 1s linear infinite"></div><div style="color:#6a85a8;font-size:.85rem">Conectando...</div>';document.body.appendChild(el);var s=document.createElement('style');s.textContent='@keyframes spin{to{transform:rotate(360deg)}}';document.head.appendChild(s);}el.style.display=show?'flex':'none';}
+function save(){try{localStorage.setItem('hp_state',JSON.stringify(state));localStorage.setItem('hp_art',JSON.stringify(articulos));localStorage.setItem('hp_ghist',JSON.stringify(globalHistory));}catch(e){}}
+function loadFromLocal(){try{var s=localStorage.getItem('hp_state'),a=localStorage.getItem('hp_art'),g=localStorage.getItem('hp_ghist');if(s)state=JSON.parse(s);if(a)articulos=JSON.parse(a);if(g)globalHistory=JSON.parse(g);Object.keys(CODES_INIT).forEach(function(c){LOCS.forEach(function(loc){if(!state[loc].stock[c])state[loc].stock[c]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};if(!state[loc].limits[c])state[loc].limits[c]={min_b:1,max_b:12,min_v:1,max_v:12};});if(!articulos[c])articulos[c]={nombre:''};});}catch(e){}}
 
-// ── Helpers UI ────────────────────────────────────────────────────────────────
-function setSyncOk(ok) {
-  var dot = document.getElementById('sync-dot');
-  if(!dot) return;
-  dot.classList.remove('offline','syncing');
-  if(!ok) dot.classList.add('offline');
-}
 
-function showLoading(show) {
-  var el = document.getElementById('loading-overlay');
-  if(!el) {
-    el = document.createElement('div');
-    el.id = 'loading-overlay';
-    el.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(8,12,20,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem';
-    el.innerHTML = '<div style="width:40px;height:40px;border:3px solid #1c2d47;border-top-color:#00e5b4;border-radius:50%;animation:spin 1s linear infinite"></div><div style="color:#6a85a8;font-size:.85rem">Conectando con Firebase...</div>';
-    document.body.appendChild(el);
-    var s = document.createElement('style');
-    s.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
-    document.head.appendChild(s);
-  }
-  el.style.display = show ? 'flex' : 'none';
-}
+// NO llamamos load() ahora — se llama loadFromDB() en el INIT
 
-// ── Fallback localStorage ─────────────────────────────────────────────────────
-function save() {
-  try {
-    localStorage.setItem('hp_state', JSON.stringify(state));
-    localStorage.setItem('hp_art',   JSON.stringify(articulos));
-    localStorage.setItem('hp_ghist', JSON.stringify(globalHistory));
-  } catch(e) {}
-}
-function loadFromLocal() {
-  try {
-    var s=localStorage.getItem('hp_state');
-    var a=localStorage.getItem('hp_art');
-    var g=localStorage.getItem('hp_ghist');
-    if(s) state=JSON.parse(s);
-    if(a) articulos=JSON.parse(a);
-    if(g) globalHistory=JSON.parse(g);
-    Object.keys(CODES_INIT).forEach(function(c) {
-      LOCS.forEach(function(loc) {
-        if(!state[loc].stock[c]) state[loc].stock[c]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
-        if(!state[loc].limits[c]) state[loc].limits[c]={min_b:1,max_b:12,min_v:1,max_v:12};
-      });
-      if(!articulos[c]) articulos[c]={nombre:''};
-    });
-  } catch(e) {}
-}
-// ══════════════════════════════════════════════════════════════════════════════
 
-// ── Estado global del bin ─────────────────────────────────────────────────────
-var binData = {
-  stock: {},
-  historial: [],
-  articulos: {},
-  limites: {},
-  despachos: []
-};
-
-// ── Guardar stock ─────────────────────────────────────────────────────────────
-function saveStock(loc, cod) {
-  var d = (state[loc] && state[loc].stock[cod]) || {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
-  if(!binData.stock[loc]) binData.stock[loc] = {};
-  binData.stock[loc][cod] = {
-    bachas: d.bachas, baldes: d.baldes,
-    kg_bachas: d.kg_bachas, kg_baldes: d.kg_baldes
-  };
-  return jbWrite(binData);
-}
-
-// ── Guardar historial ─────────────────────────────────────────────────────────
-function saveHistorial(entry) {
-  binData.historial.unshift({
-    ts: entry.ts || Date.now(),
-    fecha: entry.fecha || '',
-    hora: entry.hora || '',
-    loc: entry.loc,
-    usuario: entry.usuario || '—',
-    cod: String(entry.cod),
-    tipo: entry.tipo,
-    recip: entry.recip,
-    cant: entry.cant || 1,
-    pesoTotal: entry.pesoTotal || 0,
-    pesoUnit: entry.pesoUnit || 0,
-    nom: entry.nom || ''
-  });
-  if(binData.historial.length > 500) binData.historial.length = 500;
-  return jbWrite(binData);
-}
-
-// ── Guardar límites ───────────────────────────────────────────────────────────
-function saveLimitesDB(loc, cod) {
-  var l = (state[loc] && state[loc].limits[String(cod)]) || {min_b:1,max_b:12,min_v:1,max_v:12};
-  if(!binData.limites[loc]) binData.limites[loc] = {};
-  binData.limites[loc][cod] = l;
-  return jbWrite(binData);
-}
-
-// ── Guardar artículo ──────────────────────────────────────────────────────────
-function saveArticuloDB(cod, nombre) {
-  binData.articulos[String(cod)] = {nombre: nombre||''};
-  return jbWrite(binData);
-}
-
-// ── Guardar despacho ──────────────────────────────────────────────────────────
-function saveDespacho(d) {
-  binData.despachos = binData.despachos || [];
-  binData.despachos.unshift(d);
-  if(binData.despachos.length > 200) binData.despachos.length = 200;
-  return jbWrite(binData);
-}
-
-// ── Cargar TODO desde JSONBin ─────────────────────────────────────────────────
-
-// ── Helpers UI ────────────────────────────────────────────────────────────────
-function setSyncOk(ok) {
-  var dot = document.getElementById('sync-dot');
-  if(!dot) return;
-  dot.classList.remove('offline','syncing');
-  if(!ok) dot.classList.add('offline');
-}
-
-function showLoading(show) {
-  var el = document.getElementById('loading-overlay');
-  if(!el) {
-    el = document.createElement('div');
-    el.id = 'loading-overlay';
-    el.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(8,12,20,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem';
-    el.innerHTML = '<div style="width:40px;height:40px;border:3px solid #1c2d47;border-top-color:#00e5b4;border-radius:50%;animation:spin 1s linear infinite"></div><div style="color:#6a85a8;font-size:.85rem">Conectando...</div>';
-    document.body.appendChild(el);
-    var s = document.createElement('style');
-    s.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
-    document.head.appendChild(s);
-  }
-  el.style.display = show ? 'flex' : 'none';
-}
-
-// ── Fallback localStorage ─────────────────────────────────────────────────────
-function save() {
-  try {
-    localStorage.setItem('hp_state', JSON.stringify(state));
-    localStorage.setItem('hp_art',   JSON.stringify(articulos));
-    localStorage.setItem('hp_ghist', JSON.stringify(globalHistory));
-  } catch(e) {}
-}
-function loadFromLocal() {
-  try {
-    var s=localStorage.getItem('hp_state');
-    var a=localStorage.getItem('hp_art');
-    var g=localStorage.getItem('hp_ghist');
-    if(s) state=JSON.parse(s);
-    if(a) articulos=JSON.parse(a);
-    if(g) globalHistory=JSON.parse(g);
-    Object.keys(CODES_INIT).forEach(function(c) {
-      LOCS.forEach(function(loc) {
-        if(!state[loc].stock[c]) state[loc].stock[c]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
-        if(!state[loc].limits[c]) state[loc].limits[c]={min_b:1,max_b:12,min_v:1,max_v:12};
-      });
-      if(!articulos[c]) articulos[c]={nombre:''};
-    });
-  } catch(e) {}
-}
-// ══════════════════════════════════════════════════════════════════════════════
-// UI STATE
-// ══════════════════════════════════════════════════════════════════════════════
-var curLoc    = 'fabrica';
-var curTipo   = null;
-var curRecip  = null;
-var curFilter = 'todos';
+// ── UI STATE ──────────────────────────────────────────────────────────────────
+let curLoc = 'fabrica';
+let curTipo = null;
+let curRecip = null;
+let curFilter = 'todos';
 
 // ══════════════════════════════════════════════════════════════════════════════
 // NAV / PAGES
@@ -1258,13 +971,7 @@ function showPage(id, btn) {
   document.getElementById('page-'+id).classList.add('active');
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  if(id==='informe') {
-    if(typeof SESSION !== 'undefined' && SESSION) {
-      Promise.all(LOCS.map(function(l){return refreshLoc(l);})).then(function(){renderInformes();});
-    } else {
-      renderInformes();
-    }
-  }
+  if(id==='informe') renderInformes();
   if(id==='articulos') renderArticulos();
   if(id==='backup') renderSystemInfo();
   if(id==='cierre') { /* cierre page loaded on demand */ }
@@ -1277,10 +984,8 @@ function switchLoc(loc, btn) {
   document.getElementById('loc-label-form').textContent = LOC_NAMES[loc];
   document.getElementById('inf-loc-label').textContent = LOC_NAMES[loc]+' · todos los periodos';
   renderAll();
-  refreshLoc(loc);
+  renderInformes();
 }
-
-// refreshLoc defined in GS block above
 
 // ══════════════════════════════════════════════════════════════════════════════
 // FORMULARIO REGISTRO
@@ -1550,8 +1255,6 @@ function addArticulo() {
     state[loc].limits[String(cod)]={min_b:minB,max_b:maxB,min_v:minV,max_v:maxV};
   });
   save();
-  saveArticuloDB(cod, nom);
-  LOCS.forEach(loc => { saveLimitesDB(loc, cod); });
   toast(`Artículo ${cod}${nom?' · '+nom:''} agregado`,'ok');
   document.getElementById('art-cod').value='';
   document.getElementById('art-nombre').value='';
@@ -1581,8 +1284,7 @@ function deleteArticulo(cod, e) {
   e.stopPropagation();
   if(!confirm(`¿Eliminar el artículo ${cod}? El stock existente no se borra.`)) return;
   delete articulos[cod];
-  save();
-  renderArticulos(); renderTable(); toast(`Artículo ${cod} eliminado`,'info');
+  save(); renderArticulos(); renderTable(); toast(`Artículo ${cod} eliminado`,'info');
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1849,9 +1551,6 @@ function resetParaPiloto() {
   globalHistory = [];
   articulos = arts;
   save();
-  DATA_despachos = [];
-  // Clear Google Sheets data — reescribir con datos vacíos
-  // (el Sheet se limpia manualmente si es necesario)
   renderAll();
   renderSystemInfo();
   toast('✅ Todos los stocks en 0 — listo para cargar inventario real', 'ok');
@@ -2437,46 +2136,11 @@ function exportCierre() {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-// INIT — carga desde Supabase
+// INIT
 // ══════════════════════════════════════════════════════════════════════════════
-loadFromDB().then(() => {
-  renderAll();
-  renderArticulos();
-  renderSystemInfo();
-  loadConversiones();
-});
-
-// Auto-refresh cada 15 segundos
-setInterval(async function() {
-  if(typeof SESSION === 'undefined' || !SESSION) return;
-  try {
-    // Refresh stock de todos los locales visibles
-    var stockData = await fbGet('stock');
-    if(stockData) {
-      Object.keys(stockData).forEach(function(loc) {
-        if(!state[loc]) return;
-        Object.keys(stockData[loc]).forEach(function(cod) {
-          state[loc].stock[cod] = stockData[loc][cod];
-        });
-      });
-    }
-    // Refresh historial
-    var histData = await fbGet('historial');
-    if(histData) {
-      globalHistory = Object.values(histData)
-        .sort(function(a,b){return b.ts - a.ts;})
-        .slice(0, 500);
-      LOCS.forEach(function(loc) {
-        state[loc].history = globalHistory.filter(function(h){return h.loc===loc;});
-      });
-    }
-    // Siempre re-renderizar
-    renderAll();
-    setSyncOk(true);
-  } catch(e) {
-    setSyncOk(false);
-  }
-}, 15000);
+renderAll();
+renderArticulos();
+renderSystemInfo();
 </script>
 </body>
 </html>
