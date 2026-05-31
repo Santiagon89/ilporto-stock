@@ -1225,8 +1225,11 @@ function showPage(id, btn) {
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
   if(id==='informe') {
-    // Refresh all locs before showing reports
-    Promise.all(LOCS.map(l=>refreshLoc(l))).then(()=>renderInformes());
+    if(typeof SESSION !== 'undefined' && SESSION) {
+      Promise.all(LOCS.map(function(l){return refreshLoc(l);})).then(function(){renderInformes();});
+    } else {
+      renderInformes();
+    }
   }
   if(id==='articulos') renderArticulos();
   if(id==='backup') renderSystemInfo();
@@ -2410,13 +2413,12 @@ loadFromDB().then(() => {
 });
 
 // Auto-refresh cada 20 segundos
-setInterval(async () => {
-  if(!SESSION) return;
-  const isAdmin = SESSION.rol === 'admin';
-  // Admin refresca todos los locales, empleado solo el suyo
-  const locsToRefresh = isAdmin ? LOCS : [curLoc];
-  for(const loc of locsToRefresh) {
-    await refreshLoc(loc);
+setInterval(async function() {
+  if(typeof SESSION === 'undefined' || !SESSION) return;
+  var isAdmin = SESSION.rol === 'admin';
+  var locsToRefresh = isAdmin ? LOCS : [curLoc];
+  for(var i=0; i<locsToRefresh.length; i++) {
+    await refreshLoc(locsToRefresh[i]);
   }
 }, 20000);
 </script>
