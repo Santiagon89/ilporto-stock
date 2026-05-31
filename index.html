@@ -1085,6 +1085,8 @@ function registrar() {
   if(globalHistory.length>500) globalHistory.pop();
 
   save();
+  saveStock(curLoc, cod);
+  saveHistorial(entry);
 
   const sign=curTipo==='INGRESO'?'+':'-';
   const ico=curRecip==='BACHA'?'🫙':'🪣';
@@ -1228,6 +1230,7 @@ function saveLimits(cod) {
   if(!isNaN(v.min_v)) l.min_v = v.min_v;
   if(!isNaN(v.max_v)) l.max_v = v.max_v;
   save();
+  saveLimitesDB(curLoc, cod);
   renderTable();
   toast('Límites guardados ✓','ok');
   closeModal();
@@ -1255,6 +1258,7 @@ function addArticulo() {
     state[loc].limits[String(cod)]={min_b:minB,max_b:maxB,min_v:minV,max_v:maxV};
   });
   save();
+  saveArticuloDB(cod, nom);
   toast(`Artículo ${cod}${nom?' · '+nom:''} agregado`,'ok');
   document.getElementById('art-cod').value='';
   document.getElementById('art-nombre').value='';
