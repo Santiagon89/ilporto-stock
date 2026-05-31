@@ -1584,6 +1584,19 @@ function toast(msg,type='ok'){
 function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
 updateClock(); setInterval(updateClock,1000);
 
+// Auto-refresh cada 15 segundos
+setInterval(async function(){
+  if(typeof SESSION==="undefined"||!SESSION)return;
+  try{
+    var sd=await fbGet("stock");
+    if(sd){Object.keys(sd).forEach(function(loc){if(!state[loc])return;Object.keys(sd[loc]).forEach(function(cod){state[loc].stock[cod]=sd[loc][cod];});});}
+    var hd=await fbGet("historial");
+    if(hd){globalHistory=Object.values(hd).sort(function(a,b){return b.ts-a.ts;}).slice(0,500);LOCS.forEach(function(loc){state[loc].history=globalHistory.filter(function(h){return h.loc===loc;});});}
+    renderAll();
+    setSyncOk(true);
+  }catch(e){setSyncOk(false);}
+},15000);
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // CIERRE DE INVENTARIO
