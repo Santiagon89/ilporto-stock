@@ -910,56 +910,43 @@ let articulos = defaultArticulos();
 let globalHistory = []; // historial unificado de todos los locales
 
 // ══════════════════════════════════════════════════════════════════════════════
-// SUPABASE — backend en tiempo real
+// GOOGLE SHEETS — backend en tiempo real
 // ══════════════════════════════════════════════════════════════════════════════
-const SB_URL = 'https://lzbheglslrbafttjbtzn.supabase.co';
-const SB_KEY = 'sb_publishable_UwTiL4YbJsySbvmqTPaStA_z5Uh5jKm';
+const GS_URL      = 'https://script.google.com/macros/s/AKfycbykr_kgW-lMKHjKC3K_MpswRWNMIlQQf5KFqSnXGMWH6GSO8_-y5ZFCxSkotJT6l6BF2Q/exec';
+const GS_SHEET_ID = '1crtIXfAGY2TkUkEoU3w2fXeBDq13vXpiZJo23Vl3fB0';
 
-async function sbFetch(table, method='GET', body=null, query='') {
-  const url = `${SB_URL}/rest/v1/${table}${query}`;
-  const opts = {
-    method,
-    headers: {
-      'apikey': SB_KEY,
-      'Authorization': 'Bearer ' + SB_KEY,
-      'Content-Type': 'application/json',
-      'Prefer': method==='POST' ? 'resolution=merge-duplicates,return=minimal' : 'return=minimal'
-    }
-  };
-  if(body) opts.body = JSON.stringify(body);
-  const res = await fetch(url, opts);
-  const dot = document.getElementById('sync-dot');
-  if(res.ok || method==='GET') {
-    if(dot){ dot.classList.remove('offline','syncing'); }
-  }
-  if(method==='GET') return res.json();
-  return res.ok;
+// Despachos array separado
+let DATA_despachos = [];
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function gsGet(table) {
+  return fetch(GS_URL + '?sheetId=' + GS_SHEET_ID + '&table=' + table)
+    .then(function(r){ return r.json(); })
+    .catch(function(){ return []; });
 }
 
-// Guardar stock de un local/cod en Supabase
-async function saveStock(loc, cod) {
-  const d = state[loc].stock[cod] || {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
-  await sbFetch('stock', 'POST', {
-    loc, cod: String(cod),
+function gsPost(table, rowObj) {
+  var row = Object.keys(rowObj).map(function(k){ return {key:k, value:rowObj[k]}; });
+  return fetch(GS_URL, {
+    method: 'POST',
+    body: JSON.stringify({sheetId: GS_SHEET_ID, table: table, action: 'write', row: row})
+  }).catch(function(e){ console.error('gsPost error:', e); });
+}
+
+// ── Guardar stock ─────────────────────────────────────────────────────────────
+function saveStock(loc, cod) {
+  var d = (state[loc] && state[loc].stock[cod]) || {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+  return gsPost('stock', {
+    loc: loc, cod: String(cod),
     bachas: d.bachas, baldes: d.baldes,
     kg_bachas: d.kg_bachas, kg_baldes: d.kg_baldes,
     updated_at: new Date().toISOString()
   });
 }
 
-// Guardar límites
-async function saveLimitesDB(loc, cod) {
-  const l = state[loc].limits[String(cod)] || {min_b:1,max_b:12,min_v:1,max_v:12};
-  await sbFetch('limites', 'POST', {
-    loc, cod: String(cod),
-    min_b: l.min_b, max_b: l.max_b,
-    min_v: l.min_v, max_v: l.max_v
-  });
-}
-
-// Guardar un movimiento en historial
-async function saveHistorial(entry) {
-  await sbFetch('historial', 'POST', {
+// ── Guardar historial ─────────────────────────────────────────────────────────
+function saveHistorial(entry) {
+  return gsPost('historial', {
     ts: entry.ts || Date.now(),
     fecha: entry.fecha || '',
     hora: entry.hora || '',
@@ -975,9 +962,24 @@ async function saveHistorial(entry) {
   });
 }
 
-// Guardar despacho
-async function saveDespacho(d) {
-  await sbFetch('despachos', 'POST', {
+// ── Guardar límites ───────────────────────────────────────────────────────────
+function saveLimitesDB(loc, cod) {
+  var l = (state[loc] && state[loc].limits[String(cod)]) || {min_b:1,max_b:12,min_v:1,max_v:12};
+  return gsPost('limites', {
+    loc: loc, cod: String(cod),
+    min_b: l.min_b, max_b: l.max_b,
+    min_v: l.min_v, max_v: l.max_v
+  });
+}
+
+// ── Guardar artículo ──────────────────────────────────────────────────────────
+function saveArticuloDB(cod, nombre) {
+  return gsPost('articulos', {cod: String(cod), nombre: nombre||''});
+}
+
+// ── Guardar despacho ──────────────────────────────────────────────────────────
+function saveDespacho(d) {
+  return gsPost('despachos', {
     ts: d.ts || Date.now(),
     fecha: d.fecha || '',
     hora: d.hora || '',
@@ -991,136 +993,197 @@ async function saveDespacho(d) {
   });
 }
 
-// Guardar artículo
-async function saveArticuloDB(cod, nombre) {
-  await sbFetch('articulos', 'POST', {cod: String(cod), nombre: nombre||''});
-}
-
-// Cargar TODO desde Supabase al iniciar
+// ── Cargar TODO desde Google Sheets ──────────────────────────────────────────
 async function loadFromDB() {
   showLoading(true);
   try {
     // Stock
-    const stockRows = await sbFetch('stock', 'GET', null, '?select=*');
-    if(Array.isArray(stockRows)) {
-      stockRows.forEach(r => {
-        if(!state[r.loc]) return;
-        state[r.loc].stock[r.cod] = {
-          bachas: +r.bachas||0, baldes: +r.baldes||0,
-          kg_bachas: +r.kg_bachas||0, kg_baldes: +r.kg_baldes||0
-        };
-      });
+    var stockRows = await gsGet('stock');
+    if(Array.isArray(stockRows) && stockRows.length > 1) {
+      var hdr = stockRows[0];
+      var iLoc=hdr.indexOf('loc'), iCod=hdr.indexOf('cod');
+      var iBa=hdr.indexOf('bachas'), iBl=hdr.indexOf('baldes');
+      var iKb=hdr.indexOf('kg_bachas'), iKv=hdr.indexOf('kg_baldes');
+      for(var i=1; i<stockRows.length; i++) {
+        var r = stockRows[i];
+        var loc=r[iLoc], cod=r[iCod];
+        if(state[loc]) {
+          state[loc].stock[cod] = {
+            bachas:+r[iBa]||0, baldes:+r[iBl]||0,
+            kg_bachas:+r[iKb]||0, kg_baldes:+r[iKv]||0
+          };
+        }
+      }
     }
 
     // Límites
-    const limRows = await sbFetch('limites', 'GET', null, '?select=*');
-    if(Array.isArray(limRows)) {
-      limRows.forEach(r => {
-        if(!state[r.loc]) return;
-        state[r.loc].limits[r.cod] = {
-          min_b:+r.min_b||1, max_b:+r.max_b||12,
-          min_v:+r.min_v||1, max_v:+r.max_v||12
-        };
-      });
+    var limRows = await gsGet('limites');
+    if(Array.isArray(limRows) && limRows.length > 1) {
+      var hdr = limRows[0];
+      var iLoc=hdr.indexOf('loc'), iCod=hdr.indexOf('cod');
+      var iMnb=hdr.indexOf('min_b'), iMxb=hdr.indexOf('max_b');
+      var iMnv=hdr.indexOf('min_v'), iMxv=hdr.indexOf('max_v');
+      for(var i=1; i<limRows.length; i++) {
+        var r = limRows[i];
+        var loc=r[iLoc], cod=r[iCod];
+        if(state[loc]) {
+          state[loc].limits[cod] = {
+            min_b:+r[iMnb]||1, max_b:+r[iMxb]||12,
+            min_v:+r[iMnv]||1, max_v:+r[iMxv]||12
+          };
+        }
+      }
     }
 
     // Artículos
-    const artRows = await sbFetch('articulos', 'GET', null, '?select=*');
-    if(Array.isArray(artRows)) {
-      artRows.forEach(r => { articulos[r.cod] = {nombre: r.nombre||''}; });
+    var artRows = await gsGet('articulos');
+    if(Array.isArray(artRows) && artRows.length > 1) {
+      var hdr = artRows[0];
+      var iCod=hdr.indexOf('cod'), iNom=hdr.indexOf('nombre');
+      for(var i=1; i<artRows.length; i++) {
+        var r = artRows[i];
+        articulos[r[iCod]] = {nombre: r[iNom]||''};
+      }
     }
 
-    // Historial (últimos 500)
-    const histRows = await sbFetch('historial', 'GET', null,
-      '?select=*&order=ts.desc&limit=500');
-    if(Array.isArray(histRows)) {
-      globalHistory = histRows.map(r => ({
-        id: r.id, ts: +r.ts, fecha: r.fecha, hora: r.hora,
-        loc: r.loc, usuario: r.usuario, cod: r.cod,
-        tipo: r.tipo, recip: r.recip, cant: +r.cant||1,
-        pesoTotal: +r.peso_total||0, pesoUnit: +r.peso_unit||0,
-        nom: r.nom||''
-      }));
-      // Also populate per-loc history
-      LOCS.forEach(loc => {
-        state[loc].history = globalHistory.filter(h=>h.loc===loc);
-      });
+    // Historial
+    var histRows = await gsGet('historial');
+    if(Array.isArray(histRows) && histRows.length > 1) {
+      var hdr = histRows[0];
+      var iTs=hdr.indexOf('ts'), iFe=hdr.indexOf('fecha'), iHo=hdr.indexOf('hora');
+      var iLo=hdr.indexOf('loc'), iUs=hdr.indexOf('usuario'), iCo=hdr.indexOf('cod');
+      var iTi=hdr.indexOf('tipo'), iRe=hdr.indexOf('recip'), iCa=hdr.indexOf('cant');
+      var iPt=hdr.indexOf('peso_total'), iPu=hdr.indexOf('peso_unit'), iNo=hdr.indexOf('nom');
+      globalHistory = [];
+      for(var i=histRows.length-1; i>=1; i--) {
+        var r = histRows[i];
+        var entry = {
+          id: i, ts:+r[iTs]||0, fecha:r[iFe], hora:r[iHo],
+          loc:r[iLo], usuario:r[iUs], cod:r[iCo],
+          tipo:r[iTi], recip:r[iRe], cant:+r[iCa]||1,
+          pesoTotal:+r[iPt]||0, pesoUnit:+r[iPu]||0, nom:r[iNo]||''
+        };
+        globalHistory.unshift(entry);
+        if(state[entry.loc]) state[entry.loc].history.unshift(entry);
+      }
     }
 
     // Despachos
-    const despRows = await sbFetch('despachos', 'GET', null,
-      '?select=*&order=ts.desc&limit=200');
-    if(Array.isArray(despRows)) {
-      DATA_despachos = despRows.map(r => ({
-        id: r.id, ts: +r.ts, fecha: r.fecha, hora: r.hora,
-        usuario: r.usuario, cod: r.cod, destino: r.destino,
-        recip: r.recip, cant: +r.cant||1, peso: +r.peso||0, nom: r.nom||''
-      }));
+    var despRows = await gsGet('despachos');
+    if(Array.isArray(despRows) && despRows.length > 1) {
+      var hdr = despRows[0];
+      var iTs=hdr.indexOf('ts'), iFe=hdr.indexOf('fecha'), iHo=hdr.indexOf('hora');
+      var iUs=hdr.indexOf('usuario'), iCo=hdr.indexOf('cod'), iDe=hdr.indexOf('destino');
+      var iRe=hdr.indexOf('recip'), iCa=hdr.indexOf('cant'), iPe=hdr.indexOf('peso'), iNo=hdr.indexOf('nom');
+      DATA_despachos = [];
+      for(var i=1; i<despRows.length; i++) {
+        var r = despRows[i];
+        DATA_despachos.unshift({
+          id:i, ts:+r[iTs]||0, fecha:r[iFe], hora:r[iHo],
+          usuario:r[iUs], cod:r[iCo], destino:r[iDe],
+          recip:r[iRe], cant:+r[iCa]||1, peso:+r[iPe]||0, nom:r[iNo]||''
+        });
+      }
     }
 
     // Merge new codes
-    Object.keys(CODES_INIT).forEach(c => {
-      LOCS.forEach(loc => {
+    Object.keys(CODES_INIT).forEach(function(c) {
+      LOCS.forEach(function(loc) {
         if(!state[loc].stock[c]) state[loc].stock[c]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
         if(!state[loc].limits[c]) state[loc].limits[c]={min_b:1,max_b:12,min_v:1,max_v:12};
       });
       if(!articulos[c]) articulos[c]={nombre:''};
     });
 
+    setSyncOk(true);
   } catch(e) {
-    console.error('Error cargando DB:', e);
-    const dot = document.getElementById('sync-dot');
-    if(dot) dot.classList.add('offline');
-    toast('Sin conexión a la base de datos — modo offline', 'err');
+    console.error('Error cargando GS:', e);
+    setSyncOk(false);
+    toast('Sin conexión — modo offline', 'err');
     loadFromLocal();
   }
   showLoading(false);
 }
 
-// Fallback localStorage
-function save() {
+// ── refreshLoc desde Google Sheets ───────────────────────────────────────────
+async function refreshLoc(loc) {
   try {
-    localStorage.setItem('hp_state', JSON.stringify(state));
-    localStorage.setItem('hp_art', JSON.stringify(articulos));
-    localStorage.setItem('hp_ghist', JSON.stringify(globalHistory));
-  } catch(e) {}
-}
-function loadFromLocal() {
-  try {
-    const s=localStorage.getItem('hp_state');
-    const a=localStorage.getItem('hp_art');
-    const g=localStorage.getItem('hp_ghist');
-    if(s) state=JSON.parse(s);
-    if(a) articulos=JSON.parse(a);
-    if(g) globalHistory=JSON.parse(g);
-    Object.keys(CODES_INIT).forEach(c=>{
-      LOCS.forEach(loc=>{
-        if(!state[loc].stock[c]) state[loc].stock[c]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
-        if(!state[loc].limits[c]) state[loc].limits[c]={min_b:1,max_b:12,min_v:1,max_v:12};
+    var stockRows = await gsGet('stock');
+    if(Array.isArray(stockRows) && stockRows.length > 1) {
+      var hdr = stockRows[0];
+      var iLoc=hdr.indexOf('loc'), iCod=hdr.indexOf('cod');
+      var iBa=hdr.indexOf('bachas'), iBl=hdr.indexOf('baldes');
+      var iKb=hdr.indexOf('kg_bachas'), iKv=hdr.indexOf('kg_baldes');
+      // Reset this loc first
+      Object.keys(state[loc].stock).forEach(function(c) {
+        state[loc].stock[c] = {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
       });
-      if(!articulos[c]) articulos[c]={nombre:''};
-    });
-  } catch(e) {}
+      for(var i=1; i<stockRows.length; i++) {
+        var r = stockRows[i];
+        if(r[iLoc] !== loc) continue;
+        var cod = r[iCod];
+        state[loc].stock[cod] = {
+          bachas:+r[iBa]||0, baldes:+r[iBl]||0,
+          kg_bachas:+r[iKb]||0, kg_baldes:+r[iKv]||0
+        };
+      }
+    }
+    if(loc === curLoc) renderAll();
+    setSyncOk(true);
+  } catch(e) {
+    console.error('refreshLoc error:', e);
+    setSyncOk(false);
+  }
 }
 
-// Loading overlay
+// ── Helpers UI ────────────────────────────────────────────────────────────────
+function setSyncOk(ok) {
+  var dot = document.getElementById('sync-dot');
+  if(!dot) return;
+  dot.classList.remove('offline','syncing');
+  if(!ok) dot.classList.add('offline');
+}
+
 function showLoading(show) {
-  let el = document.getElementById('loading-overlay');
+  var el = document.getElementById('loading-overlay');
   if(!el) {
     el = document.createElement('div');
     el.id = 'loading-overlay';
     el.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(8,12,20,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem';
-    el.innerHTML = '<div style="width:40px;height:40px;border:3px solid #1c2d47;border-top-color:#00e5b4;border-radius:50%;animation:spin 1s linear infinite"></div><div style="color:#6a85a8;font-size:.85rem">Sincronizando con la base de datos...</div>';
+    el.innerHTML = '<div style="width:40px;height:40px;border:3px solid #1c2d47;border-top-color:#00e5b4;border-radius:50%;animation:spin 1s linear infinite"></div><div style="color:#6a85a8;font-size:.85rem">Conectando con la base de datos...</div>';
     document.body.appendChild(el);
-    const style = document.createElement('style');
+    var style = document.createElement('style');
     style.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
     document.head.appendChild(style);
   }
   el.style.display = show ? 'flex' : 'none';
 }
 
-// Despachos array separado (no en state)
-let DATA_despachos = [];
+// Fallback localStorage
+function save() {
+  try {
+    localStorage.setItem('hp_state', JSON.stringify(state));
+    localStorage.setItem('hp_art',   JSON.stringify(articulos));
+    localStorage.setItem('hp_ghist', JSON.stringify(globalHistory));
+  } catch(e) {}
+}
+function loadFromLocal() {
+  try {
+    var s=localStorage.getItem('hp_state');
+    var a=localStorage.getItem('hp_art');
+    var g=localStorage.getItem('hp_ghist');
+    if(s) state=JSON.parse(s);
+    if(a) articulos=JSON.parse(a);
+    if(g) globalHistory=JSON.parse(g);
+    Object.keys(CODES_INIT).forEach(function(c) {
+      LOCS.forEach(function(loc) {
+        if(!state[loc].stock[c]) state[loc].stock[c]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+        if(!state[loc].limits[c]) state[loc].limits[c]={min_b:1,max_b:12,min_v:1,max_v:12};
+      });
+      if(!articulos[c]) articulos[c]={nombre:''};
+    });
+  } catch(e) {}
+}
 
 // NO llamamos load() ahora — se llama loadFromDB() en el INIT
 
@@ -1158,38 +1221,7 @@ function switchLoc(loc, btn) {
   refreshLoc(loc);
 }
 
-async function refreshLoc(loc) {
-  try {
-    const rows = await sbFetch('stock','GET',null,'?loc=eq.'+loc+'&select=*');
-    if(!Array.isArray(rows)) return;
-    rows.forEach(r => {
-      if(!state[r.loc]) return;
-      state[r.loc].stock[r.cod] = {
-        bachas:+r.bachas||0, baldes:+r.baldes||0,
-        kg_bachas:+r.kg_bachas||0, kg_baldes:+r.kg_baldes||0
-      };
-    });
-    const hist = await sbFetch('historial','GET',null,
-      '?loc=eq.'+loc+'&order=ts.desc&limit=100&select=*');
-    if(Array.isArray(hist)) {
-      const mapped = hist.map(r=>({
-        id:r.id, ts:+r.ts, fecha:r.fecha, hora:r.hora,
-        loc:r.loc, usuario:r.usuario, cod:r.cod,
-        tipo:r.tipo, recip:r.recip, cant:+r.cant||1,
-        pesoTotal:+r.peso_total||0, pesoUnit:+r.peso_unit||0, nom:r.nom||''
-      }));
-      state[loc].history = mapped;
-      // Merge into globalHistory
-      mapped.forEach(h => {
-        const i = globalHistory.findIndex(x=>x.id===h.id);
-        if(i>=0) globalHistory[i]=h; else globalHistory.unshift(h);
-      });
-      globalHistory.sort((a,b)=>b.ts-a.ts);
-      if(globalHistory.length>500) globalHistory.length=500;
-    }
-    if(loc===curLoc) renderAll();
-  } catch(e) { console.error('refreshLoc:', e); }
-}
+// refreshLoc defined in GS block above
 
 // ══════════════════════════════════════════════════════════════════════════════
 // FORMULARIO REGISTRO
@@ -1491,7 +1523,6 @@ function deleteArticulo(cod, e) {
   if(!confirm(`¿Eliminar el artículo ${cod}? El stock existente no se borra.`)) return;
   delete articulos[cod];
   save();
-  sbFetch('articulos','DELETE',null,`?cod=eq.${cod}`);
   renderArticulos(); renderTable(); toast(`Artículo ${cod} eliminado`,'info');
 }
 
@@ -1759,15 +1790,12 @@ function resetParaPiloto() {
   globalHistory = [];
   articulos = arts;
   save();
-  // Clear Supabase tables
-  Promise.all([
-    sbFetch('stock','DELETE',null,'?loc=neq.null'),
-    sbFetch('historial','DELETE',null,'?id=gt.0'),
-    sbFetch('despachos','DELETE',null,'?id=gt.0'),
-  ]).then(()=>toast('✅ Todos los stocks en 0 — listo para cargar inventario real', 'ok'));
   DATA_despachos = [];
+  // Clear Google Sheets data — reescribir con datos vacíos
+  // (el Sheet se limpia manualmente si es necesario)
   renderAll();
   renderSystemInfo();
+  toast('✅ Todos los stocks en 0 — listo para cargar inventario real', 'ok');
 }
 
 function renderSystemInfo() {
