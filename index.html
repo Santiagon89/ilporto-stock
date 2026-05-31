@@ -910,65 +910,49 @@ let articulos = defaultArticulos();
 let globalHistory = []; // historial unificado de todos los locales
 
 // ══════════════════════════════════════════════════════════════════════════════
-// GOOGLE SHEETS — backend en tiempo real
+// FIREBASE REALTIME DATABASE
 // ══════════════════════════════════════════════════════════════════════════════
-const GS_URL      = 'https://script.google.com/macros/s/AKfycbykr_kgW-lMKHjKC3K_MpswRWNMIlQQf5KFqSnXGMWH6GSO8_-y5ZFCxSkotJT6l6BF2Q/exec';
-const GS_SHEET_ID = '1crtIXfAGY2TkUkEoU3w2fXeBDq13vXpiZJo23Vl3fB0';
+const FB_DB  = 'https://ilporto-stock-default-rtdb.firebaseio.com';
+const FB_KEY = 'AIzaSyASsaE9rvOL5po77CeRYQBnV1uFF9WhGdQ';
 
-// Despachos array separado
-let DATA_despachos = [];
+var DATA_despachos = [];
 
-// ── Helpers — JSONP para evitar CORS con Google Apps Script ──────────────────
-function gsGet(table) {
-  return new Promise(function(resolve) {
-    var cbName = 'gs_cb_' + Date.now();
-    var script = document.createElement('script');
-    var timeout = setTimeout(function() {
-      delete window[cbName];
-      document.body.removeChild(script);
-      resolve([]);
-    }, 8000);
-    window[cbName] = function(data) {
-      clearTimeout(timeout);
-      delete window[cbName];
-      try { document.body.removeChild(script); } catch(e) {}
-      resolve(data);
-    };
-    script.src = GS_URL + '?sheetId=' + GS_SHEET_ID + '&table=' + table + '&callback=' + cbName;
-    script.onerror = function() {
-      clearTimeout(timeout);
-      delete window[cbName];
-      resolve([]);
-    };
-    document.body.appendChild(script);
-  });
+// ── REST helpers ──────────────────────────────────────────────────────────────
+function fbUrl(path) {
+  return FB_DB + '/' + path + '.json?auth=' + FB_KEY;
 }
 
-function gsPost(table, rowObj) {
-  var row = Object.keys(rowObj).map(function(k){ return {key:k, value:rowObj[k]}; });
-  // Use no-cors for POST (fire and forget)
-  return fetch(GS_URL, {
+function fbGet(path) {
+  return fetch(fbUrl(path))
+    .then(function(r) { return r.json(); })
+    .catch(function() { return null; });
+}
+
+function fbSet(path, data) {
+  return fetch(fbUrl(path), {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  }).catch(function(e) { console.error('fbSet error:', e); });
+}
+
+function fbPush(path, data) {
+  return fetch(fbUrl(path), {
     method: 'POST',
-    mode: 'no-cors',
-    headers: {'Content-Type': 'text/plain'},
-    body: JSON.stringify({sheetId: GS_SHEET_ID, table: table, action: 'write', row: row})
-  }).catch(function(e){ console.error('gsPost error:', e); });
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(data)
+  }).catch(function(e) { console.error('fbPush error:', e); });
 }
 
 // ── Guardar stock ─────────────────────────────────────────────────────────────
 function saveStock(loc, cod) {
   var d = (state[loc] && state[loc].stock[cod]) || {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
-  return gsPost('stock', {
-    loc: loc, cod: String(cod),
-    bachas: d.bachas, baldes: d.baldes,
-    kg_bachas: d.kg_bachas, kg_baldes: d.kg_baldes,
-    updated_at: new Date().toISOString()
-  });
+  return fbSet('stock/' + loc + '/' + cod, d);
 }
 
 // ── Guardar historial ─────────────────────────────────────────────────────────
 function saveHistorial(entry) {
-  return gsPost('historial', {
+  return fbPush('historial', {
     ts: entry.ts || Date.now(),
     fecha: entry.fecha || '',
     hora: entry.hora || '',
@@ -978,8 +962,8 @@ function saveHistorial(entry) {
     tipo: entry.tipo,
     recip: entry.recip,
     cant: entry.cant || 1,
-    peso_total: entry.pesoTotal || 0,
-    peso_unit: entry.pesoUnit || 0,
+    pesoTotal: entry.pesoTotal || 0,
+    pesoUnit: entry.pesoUnit || 0,
     nom: entry.nom || ''
   });
 }
@@ -987,125 +971,69 @@ function saveHistorial(entry) {
 // ── Guardar límites ───────────────────────────────────────────────────────────
 function saveLimitesDB(loc, cod) {
   var l = (state[loc] && state[loc].limits[String(cod)]) || {min_b:1,max_b:12,min_v:1,max_v:12};
-  return gsPost('limites', {
-    loc: loc, cod: String(cod),
-    min_b: l.min_b, max_b: l.max_b,
-    min_v: l.min_v, max_v: l.max_v
-  });
+  return fbSet('limites/' + loc + '/' + cod, l);
 }
 
 // ── Guardar artículo ──────────────────────────────────────────────────────────
 function saveArticuloDB(cod, nombre) {
-  return gsPost('articulos', {cod: String(cod), nombre: nombre||''});
+  return fbSet('articulos/' + cod, {nombre: nombre||''});
 }
 
 // ── Guardar despacho ──────────────────────────────────────────────────────────
 function saveDespacho(d) {
-  return gsPost('despachos', {
-    ts: d.ts || Date.now(),
-    fecha: d.fecha || '',
-    hora: d.hora || '',
-    usuario: d.usuario || '—',
-    cod: String(d.cod),
-    destino: d.destino,
-    recip: d.recip,
-    cant: d.cant || 1,
-    peso: d.peso || 0,
-    nom: d.nom || ''
-  });
+  return fbPush('despachos', d);
 }
 
-// ── Cargar TODO desde Google Sheets ──────────────────────────────────────────
+// ── Cargar TODO desde Firebase ────────────────────────────────────────────────
 async function loadFromDB() {
   showLoading(true);
   try {
     // Stock
-    var stockRows = await gsGet('stock');
-    if(Array.isArray(stockRows) && stockRows.length > 1) {
-      var hdr = stockRows[0];
-      var iLoc=hdr.indexOf('loc'), iCod=hdr.indexOf('cod');
-      var iBa=hdr.indexOf('bachas'), iBl=hdr.indexOf('baldes');
-      var iKb=hdr.indexOf('kg_bachas'), iKv=hdr.indexOf('kg_baldes');
-      for(var i=1; i<stockRows.length; i++) {
-        var r = stockRows[i];
-        var loc=r[iLoc], cod=r[iCod];
-        if(state[loc]) {
-          state[loc].stock[cod] = {
-            bachas:+r[iBa]||0, baldes:+r[iBl]||0,
-            kg_bachas:+r[iKb]||0, kg_baldes:+r[iKv]||0
-          };
-        }
-      }
+    var stockData = await fbGet('stock');
+    if(stockData) {
+      Object.keys(stockData).forEach(function(loc) {
+        if(!state[loc]) return;
+        Object.keys(stockData[loc]).forEach(function(cod) {
+          state[loc].stock[cod] = stockData[loc][cod];
+        });
+      });
     }
 
     // Límites
-    var limRows = await gsGet('limites');
-    if(Array.isArray(limRows) && limRows.length > 1) {
-      var hdr = limRows[0];
-      var iLoc=hdr.indexOf('loc'), iCod=hdr.indexOf('cod');
-      var iMnb=hdr.indexOf('min_b'), iMxb=hdr.indexOf('max_b');
-      var iMnv=hdr.indexOf('min_v'), iMxv=hdr.indexOf('max_v');
-      for(var i=1; i<limRows.length; i++) {
-        var r = limRows[i];
-        var loc=r[iLoc], cod=r[iCod];
-        if(state[loc]) {
-          state[loc].limits[cod] = {
-            min_b:+r[iMnb]||1, max_b:+r[iMxb]||12,
-            min_v:+r[iMnv]||1, max_v:+r[iMxv]||12
-          };
-        }
-      }
+    var limData = await fbGet('limites');
+    if(limData) {
+      Object.keys(limData).forEach(function(loc) {
+        if(!state[loc]) return;
+        Object.keys(limData[loc]).forEach(function(cod) {
+          state[loc].limits[cod] = limData[loc][cod];
+        });
+      });
     }
 
     // Artículos
-    var artRows = await gsGet('articulos');
-    if(Array.isArray(artRows) && artRows.length > 1) {
-      var hdr = artRows[0];
-      var iCod=hdr.indexOf('cod'), iNom=hdr.indexOf('nombre');
-      for(var i=1; i<artRows.length; i++) {
-        var r = artRows[i];
-        articulos[r[iCod]] = {nombre: r[iNom]||''};
-      }
+    var artData = await fbGet('articulos');
+    if(artData) {
+      Object.keys(artData).forEach(function(cod) {
+        articulos[cod] = artData[cod];
+      });
     }
 
     // Historial
-    var histRows = await gsGet('historial');
-    if(Array.isArray(histRows) && histRows.length > 1) {
-      var hdr = histRows[0];
-      var iTs=hdr.indexOf('ts'), iFe=hdr.indexOf('fecha'), iHo=hdr.indexOf('hora');
-      var iLo=hdr.indexOf('loc'), iUs=hdr.indexOf('usuario'), iCo=hdr.indexOf('cod');
-      var iTi=hdr.indexOf('tipo'), iRe=hdr.indexOf('recip'), iCa=hdr.indexOf('cant');
-      var iPt=hdr.indexOf('peso_total'), iPu=hdr.indexOf('peso_unit'), iNo=hdr.indexOf('nom');
-      globalHistory = [];
-      for(var i=histRows.length-1; i>=1; i--) {
-        var r = histRows[i];
-        var entry = {
-          id: i, ts:+r[iTs]||0, fecha:r[iFe], hora:r[iHo],
-          loc:r[iLo], usuario:r[iUs], cod:r[iCo],
-          tipo:r[iTi], recip:r[iRe], cant:+r[iCa]||1,
-          pesoTotal:+r[iPt]||0, pesoUnit:+r[iPu]||0, nom:r[iNo]||''
-        };
-        globalHistory.unshift(entry);
-        if(state[entry.loc]) state[entry.loc].history.unshift(entry);
-      }
+    var histData = await fbGet('historial');
+    if(histData) {
+      globalHistory = Object.values(histData)
+        .sort(function(a,b){return b.ts - a.ts;})
+        .slice(0, 500);
+      LOCS.forEach(function(loc) {
+        state[loc].history = globalHistory.filter(function(h){return h.loc===loc;});
+      });
     }
 
     // Despachos
-    var despRows = await gsGet('despachos');
-    if(Array.isArray(despRows) && despRows.length > 1) {
-      var hdr = despRows[0];
-      var iTs=hdr.indexOf('ts'), iFe=hdr.indexOf('fecha'), iHo=hdr.indexOf('hora');
-      var iUs=hdr.indexOf('usuario'), iCo=hdr.indexOf('cod'), iDe=hdr.indexOf('destino');
-      var iRe=hdr.indexOf('recip'), iCa=hdr.indexOf('cant'), iPe=hdr.indexOf('peso'), iNo=hdr.indexOf('nom');
-      DATA_despachos = [];
-      for(var i=1; i<despRows.length; i++) {
-        var r = despRows[i];
-        DATA_despachos.unshift({
-          id:i, ts:+r[iTs]||0, fecha:r[iFe], hora:r[iHo],
-          usuario:r[iUs], cod:r[iCo], destino:r[iDe],
-          recip:r[iRe], cant:+r[iCa]||1, peso:+r[iPe]||0, nom:r[iNo]||''
-        });
-      }
+    var despData = await fbGet('despachos');
+    if(despData) {
+      DATA_despachos = Object.values(despData)
+        .sort(function(a,b){return b.ts - a.ts;});
     }
 
     // Merge new codes
@@ -1119,7 +1047,7 @@ async function loadFromDB() {
 
     setSyncOk(true);
   } catch(e) {
-    console.error('Error cargando GS:', e);
+    console.error('Error cargando Firebase:', e);
     setSyncOk(false);
     toast('Sin conexión — modo offline', 'err');
     loadFromLocal();
@@ -1127,28 +1055,23 @@ async function loadFromDB() {
   showLoading(false);
 }
 
-// ── refreshLoc desde Google Sheets ───────────────────────────────────────────
+// ── Refresh desde Firebase ────────────────────────────────────────────────────
 async function refreshLoc(loc) {
   try {
-    var stockRows = await gsGet('stock');
-    if(Array.isArray(stockRows) && stockRows.length > 1) {
-      var hdr = stockRows[0];
-      var iLoc=hdr.indexOf('loc'), iCod=hdr.indexOf('cod');
-      var iBa=hdr.indexOf('bachas'), iBl=hdr.indexOf('baldes');
-      var iKb=hdr.indexOf('kg_bachas'), iKv=hdr.indexOf('kg_baldes');
-      // Reset this loc first
-      Object.keys(state[loc].stock).forEach(function(c) {
-        state[loc].stock[c] = {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+    var stockData = await fbGet('stock/' + loc);
+    if(stockData && state[loc]) {
+      Object.keys(stockData).forEach(function(cod) {
+        state[loc].stock[cod] = stockData[cod];
       });
-      for(var i=1; i<stockRows.length; i++) {
-        var r = stockRows[i];
-        if(r[iLoc] !== loc) continue;
-        var cod = r[iCod];
-        state[loc].stock[cod] = {
-          bachas:+r[iBa]||0, baldes:+r[iBl]||0,
-          kg_bachas:+r[iKb]||0, kg_baldes:+r[iKv]||0
-        };
-      }
+    }
+    var histData = await fbGet('historial');
+    if(histData) {
+      globalHistory = Object.values(histData)
+        .sort(function(a,b){return b.ts - a.ts;})
+        .slice(0, 500);
+      LOCS.forEach(function(l) {
+        state[l].history = globalHistory.filter(function(h){return h.loc===l;});
+      });
     }
     if(loc === curLoc) renderAll();
     setSyncOk(true);
@@ -1172,16 +1095,16 @@ function showLoading(show) {
     el = document.createElement('div');
     el.id = 'loading-overlay';
     el.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(8,12,20,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem';
-    el.innerHTML = '<div style="width:40px;height:40px;border:3px solid #1c2d47;border-top-color:#00e5b4;border-radius:50%;animation:spin 1s linear infinite"></div><div style="color:#6a85a8;font-size:.85rem">Conectando con la base de datos...</div>';
+    el.innerHTML = '<div style="width:40px;height:40px;border:3px solid #1c2d47;border-top-color:#00e5b4;border-radius:50%;animation:spin 1s linear infinite"></div><div style="color:#6a85a8;font-size:.85rem">Conectando con Firebase...</div>';
     document.body.appendChild(el);
-    var style = document.createElement('style');
-    style.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
-    document.head.appendChild(style);
+    var s = document.createElement('style');
+    s.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+    document.head.appendChild(s);
   }
   el.style.display = show ? 'flex' : 'none';
 }
 
-// Fallback localStorage
+// ── Fallback localStorage ─────────────────────────────────────────────────────
 function save() {
   try {
     localStorage.setItem('hp_state', JSON.stringify(state));
@@ -1206,16 +1129,215 @@ function loadFromLocal() {
     });
   } catch(e) {}
 }
+// ══════════════════════════════════════════════════════════════════════════════
 
-// NO llamamos load() ahora — se llama loadFromDB() en el INIT
+// ── Estado global del bin ─────────────────────────────────────────────────────
+var binData = {
+  stock: {},
+  historial: [],
+  articulos: {},
+  limites: {},
+  despachos: []
+};
 
+// ── Guardar stock ─────────────────────────────────────────────────────────────
+function saveStock(loc, cod) {
+  var d = (state[loc] && state[loc].stock[cod]) || {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+  if(!binData.stock[loc]) binData.stock[loc] = {};
+  binData.stock[loc][cod] = {
+    bachas: d.bachas, baldes: d.baldes,
+    kg_bachas: d.kg_bachas, kg_baldes: d.kg_baldes
+  };
+  return jbWrite(binData);
+}
 
-// ── UI STATE ──────────────────────────────────────────────────────────────────
-let curLoc = 'fabrica';
-let curTipo = null;
-let curRecip = null;
-let curFilter = 'todos';
+// ── Guardar historial ─────────────────────────────────────────────────────────
+function saveHistorial(entry) {
+  binData.historial.unshift({
+    ts: entry.ts || Date.now(),
+    fecha: entry.fecha || '',
+    hora: entry.hora || '',
+    loc: entry.loc,
+    usuario: entry.usuario || '—',
+    cod: String(entry.cod),
+    tipo: entry.tipo,
+    recip: entry.recip,
+    cant: entry.cant || 1,
+    pesoTotal: entry.pesoTotal || 0,
+    pesoUnit: entry.pesoUnit || 0,
+    nom: entry.nom || ''
+  });
+  if(binData.historial.length > 500) binData.historial.length = 500;
+  return jbWrite(binData);
+}
 
+// ── Guardar límites ───────────────────────────────────────────────────────────
+function saveLimitesDB(loc, cod) {
+  var l = (state[loc] && state[loc].limits[String(cod)]) || {min_b:1,max_b:12,min_v:1,max_v:12};
+  if(!binData.limites[loc]) binData.limites[loc] = {};
+  binData.limites[loc][cod] = l;
+  return jbWrite(binData);
+}
+
+// ── Guardar artículo ──────────────────────────────────────────────────────────
+function saveArticuloDB(cod, nombre) {
+  binData.articulos[String(cod)] = {nombre: nombre||''};
+  return jbWrite(binData);
+}
+
+// ── Guardar despacho ──────────────────────────────────────────────────────────
+function saveDespacho(d) {
+  binData.despachos = binData.despachos || [];
+  binData.despachos.unshift(d);
+  if(binData.despachos.length > 200) binData.despachos.length = 200;
+  return jbWrite(binData);
+}
+
+// ── Cargar TODO desde JSONBin ─────────────────────────────────────────────────
+async function loadFromDB() {
+  showLoading(true);
+  try {
+    var data = await jbRead();
+    if(!data) throw new Error('No data');
+    binData = data;
+
+    // Stock
+    if(binData.stock) {
+      Object.keys(binData.stock).forEach(function(loc) {
+        if(!state[loc]) return;
+        Object.keys(binData.stock[loc]).forEach(function(cod) {
+          state[loc].stock[cod] = binData.stock[loc][cod];
+        });
+      });
+    }
+
+    // Límites
+    if(binData.limites) {
+      Object.keys(binData.limites).forEach(function(loc) {
+        if(!state[loc]) return;
+        Object.keys(binData.limites[loc]).forEach(function(cod) {
+          state[loc].limits[cod] = binData.limites[loc][cod];
+        });
+      });
+    }
+
+    // Artículos
+    if(binData.articulos) {
+      Object.keys(binData.articulos).forEach(function(cod) {
+        articulos[cod] = binData.articulos[cod];
+      });
+    }
+
+    // Historial
+    if(binData.historial && binData.historial.length) {
+      globalHistory = binData.historial;
+      LOCS.forEach(function(loc) {
+        state[loc].history = globalHistory.filter(function(h){return h.loc===loc;});
+      });
+    }
+
+    // Despachos
+    if(binData.despachos) {
+      DATA_despachos = binData.despachos;
+    }
+
+    // Merge new codes
+    Object.keys(CODES_INIT).forEach(function(c) {
+      LOCS.forEach(function(loc) {
+        if(!state[loc].stock[c]) state[loc].stock[c]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+        if(!state[loc].limits[c]) state[loc].limits[c]={min_b:1,max_b:12,min_v:1,max_v:12};
+      });
+      if(!articulos[c]) articulos[c]={nombre:''};
+    });
+
+    setSyncOk(true);
+  } catch(e) {
+    console.error('Error cargando JSONBin:', e);
+    setSyncOk(false);
+    toast('Sin conexión — modo offline', 'err');
+    loadFromLocal();
+  }
+  showLoading(false);
+}
+
+// ── Refresh desde JSONBin ─────────────────────────────────────────────────────
+async function refreshLoc(loc) {
+  try {
+    var data = await jbRead();
+    if(!data) return;
+    binData = data;
+
+    // Update stock for this loc
+    if(binData.stock && binData.stock[loc]) {
+      Object.keys(binData.stock[loc]).forEach(function(cod) {
+        if(state[loc]) state[loc].stock[cod] = binData.stock[loc][cod];
+      });
+    }
+
+    // Update historial
+    if(binData.historial) {
+      globalHistory = binData.historial;
+      LOCS.forEach(function(l) {
+        state[l].history = globalHistory.filter(function(h){return h.loc===l;});
+      });
+    }
+
+    if(loc === curLoc) renderAll();
+    setSyncOk(true);
+  } catch(e) {
+    console.error('refreshLoc error:', e);
+    setSyncOk(false);
+  }
+}
+
+// ── Helpers UI ────────────────────────────────────────────────────────────────
+function setSyncOk(ok) {
+  var dot = document.getElementById('sync-dot');
+  if(!dot) return;
+  dot.classList.remove('offline','syncing');
+  if(!ok) dot.classList.add('offline');
+}
+
+function showLoading(show) {
+  var el = document.getElementById('loading-overlay');
+  if(!el) {
+    el = document.createElement('div');
+    el.id = 'loading-overlay';
+    el.style.cssText = 'position:fixed;inset:0;z-index:9998;background:rgba(8,12,20,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1rem';
+    el.innerHTML = '<div style="width:40px;height:40px;border:3px solid #1c2d47;border-top-color:#00e5b4;border-radius:50%;animation:spin 1s linear infinite"></div><div style="color:#6a85a8;font-size:.85rem">Conectando...</div>';
+    document.body.appendChild(el);
+    var s = document.createElement('style');
+    s.textContent = '@keyframes spin{to{transform:rotate(360deg)}}';
+    document.head.appendChild(s);
+  }
+  el.style.display = show ? 'flex' : 'none';
+}
+
+// ── Fallback localStorage ─────────────────────────────────────────────────────
+function save() {
+  try {
+    localStorage.setItem('hp_state', JSON.stringify(state));
+    localStorage.setItem('hp_art',   JSON.stringify(articulos));
+    localStorage.setItem('hp_ghist', JSON.stringify(globalHistory));
+  } catch(e) {}
+}
+function loadFromLocal() {
+  try {
+    var s=localStorage.getItem('hp_state');
+    var a=localStorage.getItem('hp_art');
+    var g=localStorage.getItem('hp_ghist');
+    if(s) state=JSON.parse(s);
+    if(a) articulos=JSON.parse(a);
+    if(g) globalHistory=JSON.parse(g);
+    Object.keys(CODES_INIT).forEach(function(c) {
+      LOCS.forEach(function(loc) {
+        if(!state[loc].stock[c]) state[loc].stock[c]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+        if(!state[loc].limits[c]) state[loc].limits[c]={min_b:1,max_b:12,min_v:1,max_v:12};
+      });
+      if(!articulos[c]) articulos[c]={nombre:''};
+    });
+  } catch(e) {}
+}
 // ══════════════════════════════════════════════════════════════════════════════
 // NAV / PAGES
 // ══════════════════════════════════════════════════════════════════════════════
