@@ -913,13 +913,12 @@ let globalHistory = []; // historial unificado de todos los locales
 // FIREBASE REALTIME DATABASE
 // ══════════════════════════════════════════════════════════════════════════════
 const FB_DB  = 'https://ilporto-stock-default-rtdb.firebaseio.com';
-const FB_KEY = 'AIzaSyASsaE9rvOL5po77CeRYQBnV1uFF9WhGdQ';
 
 var DATA_despachos = [];
 
 // ── REST helpers ──────────────────────────────────────────────────────────────
 function fbUrl(path) {
-  return FB_DB + '/' + path + '.json?auth=' + FB_KEY;
+  return FB_DB + '/' + path + '.json';
 }
 
 function fbGet(path) {
