@@ -1139,7 +1139,10 @@ function showPage(id, btn) {
   document.getElementById('page-'+id).classList.add('active');
   document.querySelectorAll('.nav-tab').forEach(b=>b.classList.remove('active'));
   btn.classList.add('active');
-  if(id==='informe') renderInformes();
+  if(id==='informe') {
+    // Refresh all locs before showing reports
+    Promise.all(LOCS.map(l=>refreshLoc(l))).then(()=>renderInformes());
+  }
   if(id==='articulos') renderArticulos();
   if(id==='backup') renderSystemInfo();
   if(id==='cierre') { /* cierre page loaded on demand */ }
@@ -1152,7 +1155,40 @@ function switchLoc(loc, btn) {
   document.getElementById('loc-label-form').textContent = LOC_NAMES[loc];
   document.getElementById('inf-loc-label').textContent = LOC_NAMES[loc]+' · todos los periodos';
   renderAll();
-  renderInformes();
+  refreshLoc(loc);
+}
+
+async function refreshLoc(loc) {
+  try {
+    const rows = await sbFetch('stock','GET',null,'?loc=eq.'+loc+'&select=*');
+    if(!Array.isArray(rows)) return;
+    rows.forEach(r => {
+      if(!state[r.loc]) return;
+      state[r.loc].stock[r.cod] = {
+        bachas:+r.bachas||0, baldes:+r.baldes||0,
+        kg_bachas:+r.kg_bachas||0, kg_baldes:+r.kg_baldes||0
+      };
+    });
+    const hist = await sbFetch('historial','GET',null,
+      '?loc=eq.'+loc+'&order=ts.desc&limit=100&select=*');
+    if(Array.isArray(hist)) {
+      const mapped = hist.map(r=>({
+        id:r.id, ts:+r.ts, fecha:r.fecha, hora:r.hora,
+        loc:r.loc, usuario:r.usuario, cod:r.cod,
+        tipo:r.tipo, recip:r.recip, cant:+r.cant||1,
+        pesoTotal:+r.peso_total||0, pesoUnit:+r.peso_unit||0, nom:r.nom||''
+      }));
+      state[loc].history = mapped;
+      // Merge into globalHistory
+      mapped.forEach(h => {
+        const i = globalHistory.findIndex(x=>x.id===h.id);
+        if(i>=0) globalHistory[i]=h; else globalHistory.unshift(h);
+      });
+      globalHistory.sort((a,b)=>b.ts-a.ts);
+      if(globalHistory.length>500) globalHistory.length=500;
+    }
+    if(loc===curLoc) renderAll();
+  } catch(e) { console.error('refreshLoc:', e); }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2323,23 +2359,16 @@ loadFromDB().then(() => {
   loadConversiones();
 });
 
-// Auto-refresh cada 30 segundos para ver cambios de otros locales
+// Auto-refresh cada 20 segundos
 setInterval(async () => {
   if(!SESSION) return;
-  try {
-    // Refresh solo el stock del local actual (liviano)
-    const rows = await sbFetch('stock','GET',null,`?loc=eq.${curLoc}&select=*`);
-    if(Array.isArray(rows)) {
-      rows.forEach(r => {
-        state[r.loc].stock[r.cod] = {
-          bachas:+r.bachas||0, baldes:+r.baldes||0,
-          kg_bachas:+r.kg_bachas||0, kg_baldes:+r.kg_baldes||0
-        };
-      });
-      renderAll();
-    }
-  } catch(e) {}
-}, 30000);
+  const isAdmin = SESSION.rol === 'admin';
+  // Admin refresca todos los locales, empleado solo el suyo
+  const locsToRefresh = isAdmin ? LOCS : [curLoc];
+  for(const loc of locsToRefresh) {
+    await refreshLoc(loc);
+  }
+}, 20000);
 </script>
 </body>
 </html>
