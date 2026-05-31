@@ -2542,15 +2542,37 @@ loadFromDB().then(() => {
   loadConversiones();
 });
 
-// Auto-refresh cada 20 segundos
+// Auto-refresh cada 15 segundos
 setInterval(async function() {
   if(typeof SESSION === 'undefined' || !SESSION) return;
-  var isAdmin = SESSION.rol === 'admin';
-  var locsToRefresh = isAdmin ? LOCS : [curLoc];
-  for(var i=0; i<locsToRefresh.length; i++) {
-    await refreshLoc(locsToRefresh[i]);
+  try {
+    // Refresh stock de todos los locales visibles
+    var stockData = await fbGet('stock');
+    if(stockData) {
+      Object.keys(stockData).forEach(function(loc) {
+        if(!state[loc]) return;
+        Object.keys(stockData[loc]).forEach(function(cod) {
+          state[loc].stock[cod] = stockData[loc][cod];
+        });
+      });
+    }
+    // Refresh historial
+    var histData = await fbGet('historial');
+    if(histData) {
+      globalHistory = Object.values(histData)
+        .sort(function(a,b){return b.ts - a.ts;})
+        .slice(0, 500);
+      LOCS.forEach(function(loc) {
+        state[loc].history = globalHistory.filter(function(h){return h.loc===loc;});
+      });
+    }
+    // Siempre re-renderizar
+    renderAll();
+    setSyncOk(true);
+  } catch(e) {
+    setSyncOk(false);
   }
-}, 20000);
+}, 15000);
 </script>
 </body>
 </html>
