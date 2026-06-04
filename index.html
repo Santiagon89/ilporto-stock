@@ -2379,8 +2379,12 @@ function startSession(user) {
   var fl = document.getElementById('form-loc-label') || document.getElementById('loc-label-form');
   if(fl) fl.textContent = LOC_NAMES[curLoc] || curLoc;
 
+  // Show nav and loc-bar
+  document.querySelector('nav').style.display = '';
+  var locBar = document.querySelector('.loc-bar');
+  if(locBar) locBar.style.display = '';
+  document.querySelectorAll('.page').forEach(function(p){p.style.display='';p.classList.remove('active');});
   // Go to dashboard
-  document.querySelectorAll('.page').forEach(function(p){p.classList.remove('active');});
   var dash = document.getElementById('page-dash');
   if(dash) dash.classList.add('active');
   document.querySelectorAll('.nav-tab').forEach(function(b){b.classList.remove('active');});
@@ -2402,14 +2406,32 @@ function logout() {
   document.getElementById('inp-pin').value = '';
   document.querySelectorAll('.usr-btn').forEach(function(b){b.classList.remove('sel');});
   renderLoginUsers();
+  document.querySelector('nav').style.display = 'none';
+  var lb = document.querySelector('.loc-bar');
+  if(lb) lb.style.display = 'none';
+  document.querySelectorAll('.page').forEach(function(p){p.style.display='none';});
 }
 
 
 // INIT
 // ══════════════════════════════════════════════════════════════════════════════
-renderAll();
-renderArticulos();
-renderSystemInfo();
+// Hide nav and loc-bar until logged in
+document.querySelector('nav').style.display = 'none';
+var locBar = document.querySelector('.loc-bar');
+if(locBar) locBar.style.display = 'none';
+document.querySelectorAll('.page').forEach(function(p){p.style.display='none';});
+
+// Load auth then show login
+loadAuth().then(function() {
+  renderLoginUsers();
+  // Pre-load data silently
+  loadFromDB().then(function() {
+    renderAll();
+    if(typeof renderArticulos==='function') renderArticulos();
+    if(typeof renderSystemInfo==='function') renderSystemInfo();
+    if(typeof loadConversiones==='function') loadConversiones();
+  });
+});
 </script>
 </body>
 </html>
