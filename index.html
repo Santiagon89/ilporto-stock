@@ -1,6 +1,29 @@
 <!DOCTYPE html>
 <html lang="es">
 <head>
+
+<script>
+function toggleAdminPin() {
+  var ls = document.getElementById('ls-users');
+  var la = document.getElementById('ls-admin');
+  if(!ls || !la) return;
+  var showAdmin = la.style.display === 'none';
+  ls.style.display = showAdmin ? 'none' : '';
+  la.style.display = showAdmin ? '' : 'none';
+  if(showAdmin) setTimeout(function(){var p=document.getElementById('inp-pin');if(p)p.focus();}, 50);
+}
+function _selectUsr(id) {
+  // Will be properly initialized after main script loads
+  if(window._selectUsr) window._selectUsr(id);
+}
+function _doLogin() {
+  if(window._doLogin) window._doLogin();
+}
+function _doAdminLogin() {
+  if(window._doAdminLogin) window._doAdminLogin();
+}
+</script>
+
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Helados Puerto — Sistema de Stock</title>
@@ -2296,7 +2319,7 @@ function renderLoginUsers() {
   if(!list) return;
   var nonAdmin = AUTH_USERS.filter(function(u){return u.rol !== 'admin';});
   list.innerHTML = nonAdmin.map(function(u) {
-    return '<button class="usr-btn" onclick="selectUsr('' + u.id + '')">' +
+    return '<button class="usr-btn" onclick="window._selectUsr('' + u.id + '')">' +
       '<div class="usr-av" style="background:' + u.color + '">' + u.av + '</div>' +
       '<div><div class="usr-nm">' + u.nombre + '</div>' +
       '<div class="usr-rl">' + (LOC_NAMES[u.loc]||u.loc) + '</div></div>' +
