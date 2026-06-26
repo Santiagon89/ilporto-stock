@@ -522,6 +522,7 @@ tbody tr:last-child td{border:none}
                 <option value="puerto">⚓ Puerto</option>
                 <option value="labarra">🍹 La Barra</option>
                 <option value="gorlero">🌊 Gorlero</option>
+                <option value="osan">🚐 OSAN Reparto</option>
               </select>
             </div>
           </div>
@@ -1036,9 +1037,9 @@ const CODES_INIT = {
 };
 
 const LOCS = ['fabrica','puerto','labarra','gorlero'];
-const LOC_NAMES  = {fabrica:'Fábrica',puerto:'Puerto',labarra:'La Barra',gorlero:'Gorlero'};
-const LOC_ICONS  = {fabrica:'🏭',puerto:'⚓',labarra:'🍹',gorlero:'🌊'};
-const LOC_COLORS = {fabrica:'#00e5b4',puerto:'#ff7043',labarra:'#448aff',gorlero:'#ffd740'};
+const LOC_NAMES  = {fabrica:'Fábrica',puerto:'Puerto',labarra:'La Barra',gorlero:'Gorlero',osan:'OSAN Reparto'};
+const LOC_ICONS  = {fabrica:'🏭',puerto:'⚓',labarra:'🍹',gorlero:'🌊',osan:'🚐'};
+const LOC_COLORS = {fabrica:'#00e5b4',puerto:'#ff7043',labarra:'#448aff',gorlero:'#ffd740',osan:'#ab47bc'};
 const LOC_CLS    = {fabrica:'lc-fab',puerto:'lc-pue',labarra:'lc-bar',gorlero:'lc-gor'};
 
 // ── ESTADO ────────────────────────────────────────────────────────────────────
@@ -2655,16 +2656,18 @@ function registrarDespacho() {
   state['fabrica'].history.unshift(egresoEntry);
   globalHistory.unshift(egresoEntry);
 
-  // 2. Ingreso en destino
-  var stkDest = state[dest].stock[String(cod)] || {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
-  if(despRecip==='BACHA') {
-    stkDest.bachas = (stkDest.bachas||0) + cant;
-    stkDest.kg_bachas = (stkDest.kg_bachas||0) + peso;
-  } else {
-    stkDest.baldes = (stkDest.baldes||0) + cant;
-    stkDest.kg_baldes = (stkDest.kg_baldes||0) + peso;
+  // 2. Ingreso en destino (OSAN no tiene stock, solo registro)
+  if(dest !== 'osan') {
+    var stkDest = state[dest] && state[dest].stock[String(cod)] ? state[dest].stock[String(cod)] : {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+    if(despRecip==='BACHA') {
+      stkDest.bachas = (stkDest.bachas||0) + cant;
+      stkDest.kg_bachas = (stkDest.kg_bachas||0) + peso;
+    } else {
+      stkDest.baldes = (stkDest.baldes||0) + cant;
+      stkDest.kg_baldes = (stkDest.kg_baldes||0) + peso;
+    }
+    state[dest].stock[String(cod)] = stkDest;
   }
-  state[dest].stock[String(cod)] = stkDest;
 
   var ingresoEntry = {
     ts:ts+1, fecha:fecha, hora:hora, loc:dest,
@@ -2678,7 +2681,7 @@ function registrarDespacho() {
   // Save to Firebase
   save();
   saveStock('fabrica', String(cod));
-  saveStock(dest, String(cod));
+  if(dest !== 'osan') saveStock(dest, String(cod));
   saveHistorial(egresoEntry);
   saveHistorial(ingresoEntry);
 
@@ -2729,6 +2732,9 @@ function toggleDespachosUI() {
   var hist = document.getElementById('despachos-hist-card');
   if(card) card.style.display = isFab ? '' : 'none';
   if(hist) { hist.style.display = isFab ? '' : 'none'; if(isFab) renderDespachosHist(); }
+  var pillIng = document.getElementById('pill-ing');
+  if(pillIng) pillIng.style.display = isFab ? '' : 'none';
+  if(!isFab && curTipo === 'INGRESO') { curTipo = null; }
 }
 
 // INIT
