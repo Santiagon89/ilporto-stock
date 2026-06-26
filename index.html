@@ -497,6 +497,76 @@ tbody tr:last-child td{border:none}
       </div>
     </div>
 
+
+      <!-- DESPACHO A LOCAL (solo visible desde Fábrica) -->
+      <div class="card" id="despacho-card" style="display:none;margin-top:.75rem">
+        <div class="card-hdr">
+          <div class="card-hdr-left">
+            <span>🚚</span>
+            <div>
+              <h3>Despachar a local</h3>
+              <div class="sub">Egreso de Fábrica → Ingreso en destino</div>
+            </div>
+          </div>
+        </div>
+        <div class="card-body">
+          <div class="form-row">
+            <div>
+              <label>Código sabor</label>
+              <input type="number" id="d-cod" placeholder="Ej: 50" oninput="updateDespPrev()">
+            </div>
+            <div>
+              <label>Destino</label>
+              <select id="d-dest" onchange="updateDespPrev()" style="width:100%">
+                <option value="">— Local —</option>
+                <option value="puerto">⚓ Puerto</option>
+                <option value="labarra">🍹 La Barra</option>
+                <option value="gorlero">🌊 Gorlero</option>
+              </select>
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label>Recipiente</label>
+              <div style="display:flex;gap:.5rem">
+                <button class="btn btn-s" id="d-btn-b" onclick="setDespRecip('BACHA',this)" style="flex:1">🫙 Bacha</button>
+                <button class="btn btn-s" id="d-btn-v" onclick="setDespRecip('BALDE',this)" style="flex:1">🪣 Balde</button>
+              </div>
+            </div>
+            <div>
+              <label>Cantidad</label>
+              <input type="number" id="d-cant" value="1" min="1" oninput="updateDespPrev()">
+            </div>
+          </div>
+          <div class="form-row">
+            <div>
+              <label>Peso total (kg)</label>
+              <input type="text" id="d-peso" placeholder="Ej: 4,5" oninput="normalizeDespPeso(this);updateDespPrev()" style="font-family:JetBrains Mono,monospace">
+              <div id="d-peso-warn" style="font-size:.72rem;min-height:.9rem;margin-top:.2rem"></div>
+            </div>
+            <div>
+              <label>Vista previa</label>
+              <div id="d-prev" style="font-size:.8rem;color:var(--muted2);padding:.5rem;background:var(--s2);border-radius:var(--r2);min-height:40px"></div>
+            </div>
+          </div>
+          <button class="btn btn-p" onclick="registrarDespacho()">🚚 Despachar</button>
+        </div>
+      </div>
+
+      <!-- HISTORIAL DE DESPACHOS -->
+      <div class="card" id="despachos-hist-card" style="display:none;margin-top:.75rem">
+        <div class="card-hdr">
+          <div class="card-hdr-left"><span>📋</span><div><h3>Despachos recientes</h3></div></div>
+          <button class="dl-btn" onclick="renderDespachosHist()">↺ Actualizar</button>
+        </div>
+        <div style="max-height:280px;overflow-y:auto">
+          <table>
+            <thead><tr><th>Fecha</th><th>COD</th><th>Dest.</th><th>Recip.</th><th>Cant.</th><th>Kg</th></tr></thead>
+            <tbody id="despachos-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
     <!-- RIGHT: STOCK TABLE -->
     <div style="display:flex;flex-direction:column;gap:1rem">
       <!-- Summary cards -->
@@ -1232,7 +1302,7 @@ function registrar() {
 // ══════════════════════════════════════════════════════════════════════════════
 // RENDER DASHBOARD
 // ══════════════════════════════════════════════════════════════════════════════
-function renderAll() { renderSummary(); renderTable(); renderHist(); }
+function renderAll() { renderSummary(); renderTable(); renderHist(); toggleDespachosUI(); }
 
 function renderSummary() {
   const stk = state[curLoc].stock;
@@ -2466,6 +2536,7 @@ function startSession(user) {
   if(firstTab) firstTab.classList.add('active');
 
   renderAll();
+  toggleDespachosUI();
 }
 
 function logout() {
@@ -2486,6 +2557,179 @@ function logout() {
   document.querySelectorAll('.page').forEach(function(p){p.style.display='none';});
 }
 
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// DESPACHOS — Fábrica → Locales
+// ══════════════════════════════════════════════════════════════════════════════
+var despRecip = null;
+
+function setDespRecip(tipo, btn) {
+  despRecip = tipo;
+  var bB = document.getElementById('d-btn-b');
+  var bV = document.getElementById('d-btn-v');
+  // Reset both
+  bB.style.background = 'var(--s2)';
+  bB.style.borderColor = 'var(--border)';
+  bB.style.color = 'var(--txt)';
+  bV.style.background = 'var(--s2)';
+  bV.style.borderColor = 'var(--border)';
+  bV.style.color = 'var(--txt)';
+  // Highlight selected
+  btn.style.background = 'linear-gradient(135deg,var(--c1),#00b890)';
+  btn.style.borderColor = 'var(--c1)';
+  btn.style.color = '#050d14';
+  updateDespPrev();
+}
+
+function normalizeDespPeso(input) {
+  var peso = parsePeso(input.value);
+  var w = document.getElementById('d-peso-warn');
+  if(!w) return;
+  if(peso > 10 && input.value.indexOf('.') < 0 && input.value.indexOf(',') < 0) {
+    w.style.color='var(--red)'; w.textContent='⚠ ¿Quisiste decir '+(peso/1000).toFixed(3)+' kg?';
+  } else if(despRecip==='BACHA'&&peso>5) {
+    w.style.color='var(--yel)'; w.textContent='⚠ Peso alto para bacha (~4.5 kg máx)';
+  } else if(despRecip==='BALDE'&&peso>10) {
+    w.style.color='var(--yel)'; w.textContent='⚠ Peso alto para balde (~9 kg máx)';
+  } else if(peso>0) {
+    w.style.color='var(--grn)'; w.textContent='✔ '+peso.toFixed(3)+' kg';
+  } else { w.textContent=''; }
+}
+
+function updateDespPrev() {
+  var cod  = document.getElementById('d-cod').value;
+  var dest = document.getElementById('d-dest').value;
+  var cant = parseInt(document.getElementById('d-cant').value)||1;
+  var peso = parsePeso(document.getElementById('d-peso').value);
+  var prev = document.getElementById('d-prev');
+  if(!prev) return;
+  if(!cod || !dest || !despRecip || !peso) {
+    prev.textContent = 'Completá todos los campos';
+    prev.style.color = 'var(--muted2)';
+    return;
+  }
+  var nom = (articulos[cod] && articulos[cod].nombre) ? ' — ' + articulos[cod].nombre : '';
+  prev.innerHTML = '<span style="color:var(--c1);font-weight:600">COD '+cod+nom+'</span><br>'
+    + LOC_ICONS['fabrica']+' Fábrica → '+LOC_ICONS[dest]+' '+(LOC_NAMES[dest]||dest)+'<br>'
+    + cant+' '+(despRecip==='BACHA'?'🫙 bacha':'🪣 balde')+'(s) · '+peso.toFixed(3)+' kg';
+  prev.style.color = 'var(--txt)';
+}
+
+function registrarDespacho() {
+  var cod  = parseInt(document.getElementById('d-cod').value);
+  var dest = document.getElementById('d-dest').value;
+  var cant = parseInt(document.getElementById('d-cant').value)||1;
+  var peso = parsePeso(document.getElementById('d-peso').value);
+
+  if(!cod)   { toast('Ingresá el código del sabor','err'); return; }
+  if(!dest)  { toast('Seleccioná el local destino','err'); return; }
+  if(!despRecip) { toast('Seleccioná bacha o balde','err'); return; }
+  if(!peso || peso <= 0) { toast('Ingresá el peso','err'); return; }
+  if(!getAllCodes().includes(String(cod))) { toast('Código no encontrado','err'); return; }
+
+  var now = new Date();
+  var fecha = now.toLocaleDateString('es-AR', {day:'2-digit',month:'2-digit',year:'numeric'});
+  var hora  = now.toLocaleTimeString('es-AR', {hour:'2-digit',minute:'2-digit'});
+  var ts    = now.getTime();
+  var nom   = (articulos[cod] && articulos[cod].nombre) ? articulos[cod].nombre : '';
+  var usuario = SESSION ? SESSION.nombre : 'Fábrica';
+
+  // 1. Egreso en Fábrica
+  var stk = state['fabrica'].stock[String(cod)] || {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+  if(despRecip==='BACHA') {
+    stk.bachas = Math.max(0, (stk.bachas||0) - cant);
+    stk.kg_bachas = Math.max(0, (stk.kg_bachas||0) - peso);
+  } else {
+    stk.baldes = Math.max(0, (stk.baldes||0) - cant);
+    stk.kg_baldes = Math.max(0, (stk.kg_baldes||0) - peso);
+  }
+  state['fabrica'].stock[String(cod)] = stk;
+
+  var egresoEntry = {
+    ts:ts, fecha:fecha, hora:hora, loc:'fabrica',
+    usuario:usuario, cod:String(cod), tipo:'EGRESO',
+    recip:despRecip, cant:cant, pesoTotal:peso, pesoUnit:peso/cant,
+    nom:nom, esDespacho:true, destino:dest
+  };
+  state['fabrica'].history.unshift(egresoEntry);
+  globalHistory.unshift(egresoEntry);
+
+  // 2. Ingreso en destino
+  var stkDest = state[dest].stock[String(cod)] || {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+  if(despRecip==='BACHA') {
+    stkDest.bachas = (stkDest.bachas||0) + cant;
+    stkDest.kg_bachas = (stkDest.kg_bachas||0) + peso;
+  } else {
+    stkDest.baldes = (stkDest.baldes||0) + cant;
+    stkDest.kg_baldes = (stkDest.kg_baldes||0) + peso;
+  }
+  state[dest].stock[String(cod)] = stkDest;
+
+  var ingresoEntry = {
+    ts:ts+1, fecha:fecha, hora:hora, loc:dest,
+    usuario:usuario, cod:String(cod), tipo:'INGRESO',
+    recip:despRecip, cant:cant, pesoTotal:peso, pesoUnit:peso/cant,
+    nom:nom, esDespacho:true, origen:'fabrica'
+  };
+  state[dest].history.unshift(ingresoEntry);
+  globalHistory.unshift(ingresoEntry);
+
+  // Save to Firebase
+  save();
+  saveStock('fabrica', String(cod));
+  saveStock(dest, String(cod));
+  saveHistorial(egresoEntry);
+  saveHistorial(ingresoEntry);
+
+  // Save despacho record
+  var despRecord = {
+    ts:ts, fecha:fecha, hora:hora, usuario:usuario,
+    cod:String(cod), nom:nom, destino:dest,
+    recip:despRecip, cant:cant, peso:peso
+  };
+  DATA_despachos.unshift(despRecord);
+  saveDespacho(despRecord);
+
+  // Clear form
+  document.getElementById('d-cod').value='';
+  document.getElementById('d-dest').value='';
+  document.getElementById('d-cant').value='1';
+  document.getElementById('d-peso').value='';
+  document.getElementById('d-prev').textContent='Completá todos los campos';
+  document.getElementById('d-peso-warn').textContent='';
+  despRecip = null;
+  document.getElementById('d-btn-b').classList.remove('btn-p');
+  document.getElementById('d-btn-v').classList.remove('btn-p');
+
+  renderAll();
+  renderDespachosHist();
+  toast('✅ Despachado a '+LOC_NAMES[dest]+' — ingreso registrado automáticamente','ok');
+}
+
+function renderDespachosHist() {
+  var tbody = document.getElementById('despachos-tbody');
+  if(!tbody) return;
+  var recent = DATA_despachos.slice(0,20);
+  tbody.innerHTML = recent.length ? recent.map(function(d) {
+    return '<tr>'
+      +'<td style="font-size:.75rem;color:var(--muted2)">'+d.fecha+' '+d.hora+'</td>'
+      +'<td class="td-cod">'+d.cod+'</td>'
+      +'<td><span class="loc-chip lc-'+d.destino+'">'+LOC_ICONS[d.destino]+' '+(LOC_NAMES[d.destino]||d.destino)+'</span></td>'
+      +'<td style="font-size:.78rem">'+(d.recip==='BACHA'?'🫙':'🪣')+'</td>'
+      +'<td class="mono" style="font-size:.78rem">'+d.cant+'</td>'
+      +'<td class="mono c1" style="font-size:.78rem">'+d.peso.toFixed(3)+'</td>'
+      +'</tr>';
+  }).join('') : '<tr><td colspan="6"><div class="empty"><div class="eico">🚚</div>Sin despachos</div></td></tr>';
+}
+
+function toggleDespachosUI() {
+  var isFab = curLoc === 'fabrica';
+  var card = document.getElementById('despacho-card');
+  var hist = document.getElementById('despachos-hist-card');
+  if(card) card.style.display = isFab ? '' : 'none';
+  if(hist) { hist.style.display = isFab ? '' : 'none'; if(isFab) renderDespachosHist(); }
+}
 
 // INIT
 // ══════════════════════════════════════════════════════════════════════════════
