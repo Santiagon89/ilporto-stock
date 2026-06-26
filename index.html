@@ -405,6 +405,7 @@ tbody tr:last-child td{border:none}
     <button class="nav-tab" onclick="showPage('articulos',this)"><span>🗂</span> Artículos</button>
     <button class="nav-tab" onclick="showPage('backup',this)"><span>💾</span> Backup</button>
     <button class="nav-tab" onclick="showPage('cierre',this)"><span>📦</span> Cierre</button>
+    <button class="nav-tab nav-admin" onclick="showPage('osan',this)"><span>🚐</span> OSAN</button>
   </div>
   <div class="nav-right">
     <div class="clock" id="clock">--:--:--</div>
@@ -766,6 +767,57 @@ tbody tr:last-child td{border:none}
     </div>
   </div>
 
+  </div>
+
+
+  <!-- OSAN REPARTO -->
+  <div class="page" id="page-osan">
+    <div class="cierre-top">
+      <div>
+        <div style="font-size:.92rem;font-weight:700">🚐 OSAN Reparto — Historial de despachos</div>
+        <div style="font-size:.72rem;color:var(--muted2);margin-top:.1rem">Registro de helado despachado desde Fábrica a OSAN</div>
+      </div>
+      <div style="display:flex;gap:.5rem;align-items:center;flex-wrap:wrap">
+        <select id="osan-mes" onchange="renderOSAN()" style="padding:.38rem .75rem;font-size:.8rem;width:auto">
+          <option value="">Todos los meses</option>
+        </select>
+        <button class="dl-btn" onclick="exportOSAN()">⬇ Excel</button>
+      </div>
+    </div>
+
+    <div style="padding:1rem 1.5rem;display:flex;gap:.75rem;flex-wrap:wrap" id="osan-cards"></div>
+
+    <div style="padding:0 1.5rem 1rem;overflow-x:auto">
+      <div style="font-size:.78rem;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">
+        Detalle por despacho
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Fecha</th>
+            <th>Hora</th>
+            <th>COD</th>
+            <th>Nombre</th>
+            <th>Recip.</th>
+            <th>Cant.</th>
+            <th>Kg</th>
+          </tr>
+        </thead>
+        <tbody id="osan-tbody"></tbody>
+      </table>
+    </div>
+
+    <div style="padding:0 1.5rem 1rem;overflow-x:auto">
+      <div style="font-size:.78rem;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">
+        Resumen por sabor
+      </div>
+      <table>
+        <thead>
+          <tr><th>COD</th><th>Nombre</th><th>Bachas</th><th>Baldes</th><th>Total kg</th></tr>
+        </thead>
+        <tbody id="osan-resumen-tbody"></tbody>
+      </table>
+    </div>
   </div>
 
   <!-- CIERRE DE INVENTARIO -->
@@ -1139,6 +1191,7 @@ function showPage(id, btn) {
   if(id==='articulos') renderArticulos();
   if(id==='backup') renderSystemInfo();
   if(id==='cierre') { /* cierre page loaded on demand */ }
+  if(id==='osan') { initOSAN(); }
 }
 
 function switchLoc(loc, btn) {
@@ -2559,6 +2612,152 @@ function logout() {
 }
 
 
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// OSAN REPARTO — Reportes
+// ══════════════════════════════════════════════════════════════════════════════
+
+function initOSAN() {
+  // Populate months selector from despachos to OSAN
+  var despachos = DATA_despachos.filter(function(d){ return d.destino === 'osan'; });
+  var meses = {};
+  despachos.forEach(function(d) {
+    if(!d.fecha) return;
+    var parts = d.fecha.split('/');
+    if(parts.length < 3) return;
+    var key = parts[2] + '-' + parts[1]; // YYYY-MM
+    var label = parts[1] + '/' + parts[2]; // MM/YYYY
+    meses[key] = label;
+  });
+  var sel = document.getElementById('osan-mes');
+  if(!sel) return;
+  var keys = Object.keys(meses).sort().reverse();
+  sel.innerHTML = '<option value="">Todos los meses</option>';
+  keys.forEach(function(k) {
+    sel.innerHTML += '<option value="'+k+'">'+meses[k]+'</option>';
+  });
+  renderOSAN();
+}
+
+function renderOSAN() {
+  var sel = document.getElementById('osan-mes');
+  var mesFilt = sel ? sel.value : '';
+
+  var despachos = DATA_despachos.filter(function(d) {
+    if(d.destino !== 'osan') return false;
+    if(!mesFilt) return true;
+    if(!d.fecha) return false;
+    var parts = d.fecha.split('/');
+    if(parts.length < 3) return false;
+    return parts[2]+'-'+parts[1] === mesFilt;
+  });
+
+  // Summary cards
+  var totalKg = despachos.reduce(function(s,d){ return s + (d.peso||0); }, 0);
+  var totalB  = despachos.filter(function(d){ return d.recip==='BACHA'; }).reduce(function(s,d){ return s+(d.cant||0); },0);
+  var totalV  = despachos.filter(function(d){ return d.recip==='BALDE'; }).reduce(function(s,d){ return s+(d.cant||0); },0);
+  var nDesp   = despachos.length;
+
+  var cards = document.getElementById('osan-cards');
+  if(cards) cards.innerHTML = [
+    {l:'Despachos', v:nDesp,              cc:'var(--c1)'},
+    {l:'🫙 Bachas',  v:totalB+' u',        cc:'var(--c2)'},
+    {l:'🪣 Baldes',  v:totalV+' u',        cc:'var(--c3)'},
+    {l:'Total kg',  v:totalKg.toFixed(2)+' kg', cc:'var(--grn)'},
+  ].map(function(c) {
+    return '<div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r2);padding:.65rem 1rem;text-align:center;min-width:100px">'
+      +'<div style="font-size:.66rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted2)">'+c.l+'</div>'
+      +'<div style="font-family:JetBrains Mono,monospace;font-size:1.25rem;font-weight:700;color:'+c.cc+'">'+c.v+'</div>'
+      +'</div>';
+  }).join('');
+
+  // Detail table
+  var tbody = document.getElementById('osan-tbody');
+  if(tbody) {
+    tbody.innerHTML = despachos.length ? despachos.map(function(d) {
+      var nom = (articulos[d.cod] && articulos[d.cod].nombre) ? articulos[d.cod].nombre : '';
+      return '<tr>'
+        +'<td style="font-size:.76rem;color:var(--muted2)">'+d.fecha+'</td>'
+        +'<td style="font-size:.76rem;color:var(--muted2)">'+d.hora+'</td>'
+        +'<td class="td-cod">'+d.cod+'</td>'
+        +'<td style="font-size:.78rem;color:var(--muted2)">'+nom+'</td>'
+        +'<td style="font-size:.78rem">'+(d.recip==='BACHA'?'🫙 Bacha':'🪣 Balde')+'</td>'
+        +'<td class="mono" style="font-size:.78rem">'+d.cant+'</td>'
+        +'<td class="mono c1" style="font-size:.78rem">'+(d.peso||0).toFixed(3)+'</td>'
+        +'</tr>';
+    }).join('')
+    : '<tr><td colspan="7"><div class="empty"><div class="eico">🚐</div>Sin despachos a OSAN'+
+      (mesFilt ? ' en este período' : '')+'</div></td></tr>';
+  }
+
+  // Resumen por sabor
+  var bySabor = {};
+  despachos.forEach(function(d) {
+    if(!bySabor[d.cod]) bySabor[d.cod] = {bachas:0,baldes:0,kgB:0,kgV:0};
+    if(d.recip==='BACHA') { bySabor[d.cod].bachas+=d.cant||0; bySabor[d.cod].kgB+=d.peso||0; }
+    else                  { bySabor[d.cod].baldes+=d.cant||0; bySabor[d.cod].kgV+=d.peso||0; }
+  });
+  var rTbody = document.getElementById('osan-resumen-tbody');
+  if(rTbody) {
+    var rCodes = Object.keys(bySabor).sort(function(a,b){return +a-+b;});
+    rTbody.innerHTML = rCodes.length ? rCodes.map(function(c) {
+      var s = bySabor[c];
+      var nom = (articulos[c] && articulos[c].nombre) ? articulos[c].nombre : '';
+      var totalKgC = s.kgB + s.kgV;
+      return '<tr>'
+        +'<td class="td-cod">'+c+'</td>'
+        +'<td style="font-size:.78rem;color:var(--muted2)">'+nom+'</td>'
+        +'<td class="mono" style="font-size:.78rem">'+s.bachas+'</td>'
+        +'<td class="mono" style="font-size:.78rem">'+s.baldes+'</td>'
+        +'<td class="mono c1" style="font-size:.78rem;font-weight:600">'+totalKgC.toFixed(3)+' kg</td>'
+        +'</tr>';
+    }).join('')
+    : '<tr><td colspan="5"><div class="empty"><div class="eico">📊</div>Sin datos</div></td></tr>';
+  }
+}
+
+function exportOSAN() {
+  var sel = document.getElementById('osan-mes');
+  var mesFilt = sel ? sel.value : '';
+  var despachos = DATA_despachos.filter(function(d) {
+    if(d.destino !== 'osan') return false;
+    if(!mesFilt) return true;
+    if(!d.fecha) return false;
+    var parts = d.fecha.split('/');
+    return parts.length >= 3 && parts[2]+'-'+parts[1] === mesFilt;
+  });
+
+  var wb = XLSX.utils.book_new();
+
+  // Detalle
+  var rows = [['Fecha','Hora','Código','Nombre','Recipiente','Cantidad','Kg']];
+  despachos.forEach(function(d) {
+    var nom = (articulos[d.cod] && articulos[d.cod].nombre) ? articulos[d.cod].nombre : '';
+    rows.push([d.fecha, d.hora, +d.cod, nom, d.recip, d.cant||0, d.peso||0]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Detalle OSAN');
+
+  // Resumen por sabor
+  var bySabor = {};
+  despachos.forEach(function(d) {
+    if(!bySabor[d.cod]) bySabor[d.cod]={bachas:0,baldes:0,kg:0};
+    if(d.recip==='BACHA') bySabor[d.cod].bachas+=d.cant||0;
+    else bySabor[d.cod].baldes+=d.cant||0;
+    bySabor[d.cod].kg+=(d.peso||0);
+  });
+  var rRows = [['Código','Nombre','Bachas','Baldes','Total kg']];
+  Object.keys(bySabor).sort(function(a,b){return +a-+b;}).forEach(function(c) {
+    var s=bySabor[c];
+    var nom=(articulos[c]&&articulos[c].nombre)?articulos[c].nombre:'';
+    rRows.push([+c,nom,s.bachas,s.baldes,s.kg]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rRows), 'Resumen por sabor');
+
+  var label = mesFilt ? mesFilt : 'Todo';
+  XLSX.writeFile(wb, 'OSAN_Reparto_'+label+'.xlsx');
+  toast('Excel exportado', 'ok');
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 // DESPACHOS — Fábrica → Locales
