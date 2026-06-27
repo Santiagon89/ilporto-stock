@@ -192,7 +192,7 @@ tbody tr:last-child td{border:none}
 .bkp-btn.danger:hover{background:rgba(255,82,82,.1)}
 
 /* ── MODAL ── */
-.overlay{position:fixed;inset:0;z-index:500;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
+.overlay{position:fixed;inset:0;z-index:10000;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .2s}
 .overlay.open{opacity:1;pointer-events:all}
 .modal{background:var(--s2);border:1px solid var(--border2);border-radius:16px;padding:1.75rem;width:90%;max-width:460px;transform:scale(.94);transition:transform .25s cubic-bezier(.34,1.56,.64,1)}
 .overlay.open .modal{transform:scale(1)}
