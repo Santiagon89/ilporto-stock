@@ -12,29 +12,8 @@ function toggleAdminPin() {
   la.style.display = showAdmin ? '' : 'none';
   if(showAdmin) setTimeout(function(){var p=document.getElementById('inp-pin');if(p)p.focus();}, 50);
 }
-function _selectUsr(id) {
-  selUsr = AUTH_USERS.find(function(u){return u.id===id;});
-  if(!selUsr) return;
-  var pr = document.getElementById('pass-row');
-  if(pr) {
-    pr.style.display = 'flex';
-    var btn = pr.querySelector('button');
-    if(btn) btn.style.background = 'linear-gradient(135deg,'+selUsr.color+',#00b890)';
-    var inp = document.getElementById('inp-pass');
-    if(inp) {
-      inp.style.borderColor = selUsr.color;
-      inp.value = '';
-      setTimeout(function(){inp.focus();}, 50);
-    }
-  }
-  document.getElementById('login-err').textContent = '';
-}
-function _doLogin() {
-  if(window._doLogin) window._doLogin();
-}
-function _doAdminLogin() {
-  if(window._doAdminLogin) window._doAdminLogin();
-}
+function doLogin() { /* defined in main script */ }
+function doAdminLogin() { /* defined in main script */ }
 </script>
 
 <meta charset="UTF-8">
@@ -449,6 +428,7 @@ tbody tr:last-child td{border:none}
     <button class="nav-tab" onclick="showPage('backup',this)"><span>💾</span> Backup</button>
     <button class="nav-tab" onclick="showPage('cierre',this)"><span>📦</span> Cierre</button>
     <button class="nav-tab nav-admin" onclick="showPage('osan',this)"><span>🚐</span> OSAN</button>
+    <button class="nav-tab" id="tab-pedido" onclick="showPage('pedido',this)"><span>📋</span> Pre-pedido</button>
   </div>
   <div class="nav-right">
     <div class="clock" id="clock">--:--:--</div>
@@ -542,23 +522,19 @@ tbody tr:last-child td{border:none}
     </div>
 
 
-      <!-- DESPACHO A LOCAL (solo visible desde Fábrica) -->
+
+      <!-- DESPACHO EN BLOQUE (solo visible desde Fábrica) -->
       <div class="card" id="despacho-card" style="display:none;margin-top:.75rem">
         <div class="card-hdr">
           <div class="card-hdr-left">
             <span>🚚</span>
-            <div>
-              <h3>Despachar a local</h3>
-              <div class="sub">Egreso de Fábrica → Ingreso en destino</div>
-            </div>
+            <div><h3>Despacho en bloque</h3><div class="sub">Cargá los artículos y despachá todo junto</div></div>
           </div>
         </div>
         <div class="card-body">
+
+          <!-- Destino -->
           <div class="form-row">
-            <div>
-              <label>Código sabor</label>
-              <input type="number" id="d-cod" placeholder="Ej: 50" oninput="updateDespPrev()">
-            </div>
             <div>
               <label>Destino</label>
               <select id="d-dest" onchange="updateDespPrev()" style="width:100%">
@@ -570,31 +546,53 @@ tbody tr:last-child td{border:none}
               </select>
             </div>
           </div>
-          <div class="form-row">
-            <div>
-              <label>Recipiente</label>
-              <div style="display:flex;gap:.5rem">
-                <button class="btn btn-s" id="d-btn-b" onclick="setDespRecip('BACHA',this)" style="flex:1">🫙 Bacha</button>
-                <button class="btn btn-s" id="d-btn-v" onclick="setDespRecip('BALDE',this)" style="flex:1">🪣 Balde</button>
+
+          <!-- Agregar línea -->
+          <div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r2);padding:.75rem;margin-bottom:.5rem">
+            <div style="font-size:.74rem;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.5rem">Agregar artículo</div>
+            <div class="form-row">
+              <div>
+                <label>Código</label>
+                <input type="number" id="d-cod" placeholder="Ej: 50" style="width:100%">
+              </div>
+              <div>
+                <label>Recipiente</label>
+                <div style="display:flex;gap:.4rem">
+                  <button class="btn btn-s" id="d-btn-b" onclick="setDespRecip('BACHA',this)" style="flex:1;font-size:.76rem">🫙 Bacha</button>
+                  <button class="btn btn-s" id="d-btn-v" onclick="setDespRecip('BALDE',this)" style="flex:1;font-size:.76rem">🪣 Balde</button>
+                </div>
               </div>
             </div>
-            <div>
-              <label>Cantidad</label>
-              <input type="number" id="d-cant" value="1" min="1" oninput="updateDespPrev()">
+            <div class="form-row">
+              <div>
+                <label>Cantidad</label>
+                <input type="number" id="d-cant" value="1" min="1" style="width:100%">
+              </div>
+              <div>
+                <label>Peso total (kg)</label>
+                <input type="text" id="d-peso" placeholder="Ej: 4,5" style="font-family:JetBrains Mono,monospace;width:100%" oninput="normalizeDespPeso(this)">
+                <div id="d-peso-warn" style="font-size:.7rem;min-height:.9rem;margin-top:.15rem"></div>
+              </div>
             </div>
+            <button class="btn btn-s" onclick="addDespItem()" style="width:100%;background:var(--s3);border-color:var(--border2)">+ Agregar a la lista</button>
           </div>
-          <div class="form-row">
-            <div>
-              <label>Peso total (kg)</label>
-              <input type="text" id="d-peso" placeholder="Ej: 4,5" oninput="normalizeDespPeso(this);updateDespPrev()" style="font-family:JetBrains Mono,monospace">
-              <div id="d-peso-warn" style="font-size:.72rem;min-height:.9rem;margin-top:.2rem"></div>
+
+          <!-- Lista de items -->
+          <div id="desp-lista-wrap" style="display:none;margin-bottom:.5rem">
+            <div style="font-size:.74rem;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.35rem">Lista de despacho</div>
+            <div style="border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">
+              <table style="width:100%">
+                <thead><tr><th>COD</th><th>Nombre</th><th>Recip.</th><th>Cant.</th><th>Kg</th><th></th></tr></thead>
+                <tbody id="desp-lista-tbody"></tbody>
+              </table>
             </div>
-            <div>
-              <label>Vista previa</label>
-              <div id="d-prev" style="font-size:.8rem;color:var(--muted2);padding:.5rem;background:var(--s2);border-radius:var(--r2);min-height:40px"></div>
+            <div style="display:flex;justify-content:flex-end;padding:.5rem 0;font-size:.8rem;color:var(--muted2)">
+              Total: <span id="desp-total-kg" style="color:var(--c1);font-weight:600;margin-left:.4rem">0.000 kg</span>
             </div>
+            <button class="btn btn-p" onclick="confirmarDespachoBloque()" style="width:100%">🚚 Despachar todo</button>
+            <button onclick="limpiarDespacho()" style="width:100%;margin-top:.4rem;background:none;border:none;color:var(--red);cursor:pointer;font-size:.78rem">✕ Limpiar lista</button>
           </div>
-          <button class="btn btn-p" onclick="registrarDespacho()">🚚 Despachar</button>
+
         </div>
       </div>
 
@@ -604,13 +602,14 @@ tbody tr:last-child td{border:none}
           <div class="card-hdr-left"><span>📋</span><div><h3>Despachos recientes</h3></div></div>
           <button class="dl-btn" onclick="renderDespachosHist()">↺ Actualizar</button>
         </div>
-        <div style="max-height:280px;overflow-y:auto">
+        <div style="max-height:260px;overflow-y:auto">
           <table>
-            <thead><tr><th>Fecha</th><th>COD</th><th>Dest.</th><th>Recip.</th><th>Cant.</th><th>Kg</th></tr></thead>
+            <thead><tr><th>Fecha</th><th>Dest.</th><th>Items</th><th>Total kg</th></tr></thead>
             <tbody id="despachos-tbody"></tbody>
           </table>
         </div>
       </div>
+
 
     <!-- RIGHT: STOCK TABLE -->
     <div style="display:flex;flex-direction:column;gap:1rem">
@@ -812,6 +811,49 @@ tbody tr:last-child td{border:none}
 
   </div>
 
+
+
+  <!-- PRE-PEDIDO -->
+  <div class="page" id="page-pedido">
+    <div class="cierre-top">
+      <div>
+        <div style="font-size:.92rem;font-weight:700">📋 Pre-pedido a Fábrica</div>
+        <div style="font-size:.72rem;color:var(--muted2);margin-top:.1rem" id="pedido-loc-lbl">Basado en stock actual vs mínimos y máximos</div>
+      </div>
+      <div style="display:flex;gap:.5rem;flex-wrap:wrap">
+        <button class="dl-btn" onclick="generarPedido()">↺ Regenerar</button>
+        <button class="dl-btn" onclick="exportPedido()">⬇ Excel</button>
+        <button class="btn btn-p" style="font-size:.8rem;padding:.38rem .9rem" onclick="enviarPedidoFabrica()">📤 Enviar a Fábrica</button>
+      </div>
+    </div>
+
+    <div style="padding:.75rem 1.5rem;background:var(--s2);border-bottom:1px solid var(--border)">
+      <div style="font-size:.78rem;color:var(--muted2);line-height:1.6">
+        El pre-pedido se genera automáticamente con los sabores que están <strong style="color:var(--txt)">por debajo del mínimo</strong>.
+        La cantidad sugerida es la necesaria para llegar al <strong style="color:var(--txt)">máximo</strong>.
+        Podés ajustar las cantidades antes de enviar.
+      </div>
+    </div>
+
+    <div style="padding:1rem 1.5rem;overflow-x:auto">
+      <div style="display:flex;gap:.65rem;flex-wrap:wrap;margin-bottom:1rem" id="pedido-cards"></div>
+      <table id="pedido-table">
+        <thead>
+          <tr>
+            <th>COD</th>
+            <th>Nombre</th>
+            <th>Stock actual</th>
+            <th>Mínimo</th>
+            <th>Máximo</th>
+            <th style="background:rgba(0,229,180,.08);color:var(--c1)">Pedir bachas</th>
+            <th style="background:rgba(0,229,180,.08);color:var(--c1)">Pedir baldes</th>
+            <th>Estado</th>
+          </tr>
+        </thead>
+        <tbody id="pedido-tbody"></tbody>
+      </table>
+    </div>
+  </div>
 
   <!-- OSAN REPARTO -->
   <div class="page" id="page-osan">
@@ -1235,6 +1277,8 @@ function showPage(id, btn) {
   if(id==='backup') renderSystemInfo();
   if(id==='cierre') { /* cierre page loaded on demand */ }
   if(id==='osan') { initOSAN(); }
+  if(id==='pedido') { generarPedido(); }
+  if(id==='pedido') { generarPedido(); }
 }
 
 function switchLoc(loc, btn) {
@@ -2688,10 +2732,9 @@ function markAllRead() {
 function getNotifForLoc() {
   if(!SESSION || SESSION.rol === 'admin') return [];
   var loc = SESSION.loc;
-  // Get despachos directed to this loc from DATA_despachos
   return DATA_despachos.filter(function(d){ return d.destino === loc; })
     .sort(function(a,b){ return b.ts - a.ts; })
-    .slice(0, 30);
+    .slice(0, 20);
 }
 
 function renderNotifPanel() {
@@ -2717,10 +2760,14 @@ function renderNotifPanel() {
   }
   list.innerHTML = notifs.map(function(n) {
     var isRead = readIds.indexOf(n.ts) >= 0;
-    var nom = (articulos[n.cod] && articulos[n.cod].nombre) ? ' — ' + articulos[n.cod].nombre : '';
+    var itemCount = n.items ? n.items.length : 1;
+    var totalKg   = n.totalKg || n.peso || 0;
+    var sub = n.items
+      ? itemCount + ' articulos · ' + totalKg.toFixed(3) + ' kg'
+      : 'COD ' + n.cod + ' · ' + (n.cant||1) + ' ' + (n.recip==='BACHA'?'bacha':'balde') + ' · ' + (n.peso||0).toFixed(3) + ' kg';
     return '<div class="notif-item ' + (isRead ? 'read' : 'unread') + '" onclick="showNotifDetail(' + n.ts + ')">'
-      + '<div class="notif-item-title">📦 Nuevo ingreso desde Fábrica</div>'
-      + '<div class="notif-item-sub">COD ' + n.cod + nom + ' · ' + n.cant + ' ' + (n.recip==='BACHA'?'🫙 bacha':'🪣 balde') + '(s) · ' + (n.peso||0).toFixed(3) + ' kg</div>'
+      + '<div class="notif-item-title">📦 Ingreso desde Fabrica</div>'
+      + '<div class="notif-item-sub">' + sub + '</div>'
       + '<div class="notif-item-time">' + n.fecha + ' ' + n.hora + '</div>'
       + '</div>';
   }).join('');
@@ -2741,24 +2788,45 @@ function toggleNotifPanel() {
 function showNotifDetail(ts) {
   var notif = DATA_despachos.find(function(d){ return d.ts === ts; });
   if(!notif) return;
-
   markRead(ts);
   renderNotifPanel();
 
-  var nom = (articulos[notif.cod] && articulos[notif.cod].nombre) ? articulos[notif.cod].nombre : 'Sin nombre';
   var content = document.getElementById('notif-detail-content');
-  if(content) content.innerHTML =
-    '<div style="display:flex;flex-direction:column;gap:.65rem">'
-    + '<div class="cs-row"><span class="cs-lbl">Fecha</span><span class="cs-val">' + notif.fecha + ' ' + notif.hora + '</span></div>'
-    + '<div class="cs-row"><span class="cs-lbl">Desde</span><span class="cs-val">🏭 Fábrica</span></div>'
-    + '<div class="cs-row"><span class="cs-lbl">Código</span><span class="cs-val c1">' + notif.cod + '</span></div>'
-    + '<div class="cs-row"><span class="cs-lbl">Sabor</span><span class="cs-val">' + nom + '</span></div>'
-    + '<div class="cs-row"><span class="cs-lbl">Recipiente</span><span class="cs-val">' + (notif.recip==='BACHA'?'🫙 Bacha':'🪣 Balde') + '</span></div>'
-    + '<div class="cs-row"><span class="cs-lbl">Cantidad</span><span class="cs-val">' + notif.cant + ' unidad(es)</span></div>'
-    + '<div class="cs-row"><span class="cs-lbl">Peso total</span><span class="cs-val c1">' + (notif.peso||0).toFixed(3) + ' kg</span></div>'
-    + (notif.usuario ? '<div class="cs-row"><span class="cs-lbl">Despachado por</span><span class="cs-val">' + notif.usuario + '</span></div>' : '')
-    + '</div>'
-    + '<button class="btn btn-p" style="margin-top:1rem;max-width:200px" onclick="closeNotifDetail()">✓ Entendido</button>';
+  if(!content) return;
+
+  var header = '<div class="cs-row"><span class="cs-lbl">Fecha</span><span class="cs-val">' + notif.fecha + ' ' + notif.hora + '</span></div>'
+    + '<div class="cs-row"><span class="cs-lbl">Desde</span><span class="cs-val">Fabrica</span></div>'
+    + (notif.usuario?'<div class="cs-row"><span class="cs-lbl">Despachado por</span><span class="cs-val">'+notif.usuario+'</span></div>':'');
+
+  var itemsHtml = '';
+  if(notif.items && notif.items.length) {
+    // Block dispatch
+    itemsHtml += '<div style="margin-top:.75rem;font-size:.74rem;font-weight:600;color:var(--muted2);text-transform:uppercase;letter-spacing:.06em;margin-bottom:.35rem">Articulos despachados</div>';
+    itemsHtml += '<div style="border:1px solid var(--border);border-radius:var(--r2);overflow:hidden">';
+    itemsHtml += '<table style="width:100%"><thead><tr><th>COD</th><th>Nombre</th><th>Recip.</th><th>Cant.</th><th>Kg</th></tr></thead><tbody>';
+    notif.items.forEach(function(item) {
+      itemsHtml += '<tr>'
+        +'<td class="td-cod">'+item.cod+'</td>'
+        +'<td style="font-size:.76rem;color:var(--muted2)">'+item.nom+'</td>'
+        +'<td style="font-size:.76rem">'+(item.recip==='BACHA'?'Bacha':'Balde')+'</td>'
+        +'<td class="mono" style="font-size:.76rem">'+item.cant+'</td>'
+        +'<td class="mono c1" style="font-size:.76rem">'+item.peso.toFixed(3)+'</td>'
+        +'</tr>';
+    });
+    var totalKg = notif.totalKg || notif.items.reduce(function(s,i){return s+i.peso;},0);
+    itemsHtml += '</tbody><tfoot><tr><td colspan="4" style="font-weight:600;font-size:.78rem;padding:.4rem .75rem">TOTAL</td><td class="mono c1" style="font-weight:700;font-size:.78rem">'+totalKg.toFixed(3)+' kg</td></tr></tfoot></table></div>';
+  } else {
+    // Single item (legacy)
+    var nom = (articulos[notif.cod]&&articulos[notif.cod].nombre)?articulos[notif.cod].nombre:'';
+    itemsHtml = '<div class="cs-row"><span class="cs-lbl">Codigo</span><span class="cs-val c1">'+notif.cod+'</span></div>'
+      +'<div class="cs-row"><span class="cs-lbl">Sabor</span><span class="cs-val">'+nom+'</span></div>'
+      +'<div class="cs-row"><span class="cs-lbl">Recipiente</span><span class="cs-val">'+(notif.recip==='BACHA'?'Bacha':'Balde')+'</span></div>'
+      +'<div class="cs-row"><span class="cs-lbl">Cantidad</span><span class="cs-val">'+notif.cant+' u</span></div>'
+      +'<div class="cs-row"><span class="cs-lbl">Peso</span><span class="cs-val c1">'+((notif.peso||0).toFixed(3))+' kg</span></div>';
+  }
+
+  content.innerHTML = '<div style="display:flex;flex-direction:column;gap:.4rem">' + header + '</div>' + itemsHtml
+    + '<button class="btn btn-p" style="margin-top:1rem;width:100%" onclick="closeNotifDetail()">Entendido</button>';
 
   document.getElementById('notif-detail-overlay').classList.add('open');
   document.getElementById('notif-panel').classList.remove('open');
@@ -2776,6 +2844,319 @@ document.addEventListener('click', function(e) {
     panel.classList.remove('open');
   }
 });
+
+// ══════════════════════════════════════════════════════════════════════════════
+// OSAN REPARTO — Reportes
+// ══════════════════════════════════════════════════════════════════════════════
+
+function initOSAN() {
+  // Populate months selector from despachos to OSAN
+  var despachos = DATA_despachos.filter(function(d){ return d.destino === 'osan'; });
+  var meses = {};
+  despachos.forEach(function(d) {
+    if(!d.fecha) return;
+    var parts = d.fecha.split('/');
+    if(parts.length < 3) return;
+    var key = parts[2] + '-' + parts[1]; // YYYY-MM
+    var label = parts[1] + '/' + parts[2]; // MM/YYYY
+    meses[key] = label;
+  });
+  var sel = document.getElementById('osan-mes');
+  if(!sel) return;
+  var keys = Object.keys(meses).sort().reverse();
+  sel.innerHTML = '<option value="">Todos los meses</option>';
+  keys.forEach(function(k) {
+    sel.innerHTML += '<option value="'+k+'">'+meses[k]+'</option>';
+  });
+  renderOSAN();
+}
+
+function renderOSAN() {
+  var sel = document.getElementById('osan-mes');
+  var mesFilt = sel ? sel.value : '';
+
+  var despachos = DATA_despachos.filter(function(d) {
+    if(d.destino !== 'osan') return false;
+    if(!mesFilt) return true;
+    if(!d.fecha) return false;
+    var parts = d.fecha.split('/');
+    if(parts.length < 3) return false;
+    return parts[2]+'-'+parts[1] === mesFilt;
+  });
+
+  // Summary cards
+  var totalKg = despachos.reduce(function(s,d){ return s + (d.peso||0); }, 0);
+  var totalB  = despachos.filter(function(d){ return d.recip==='BACHA'; }).reduce(function(s,d){ return s+(d.cant||0); },0);
+  var totalV  = despachos.filter(function(d){ return d.recip==='BALDE'; }).reduce(function(s,d){ return s+(d.cant||0); },0);
+  var nDesp   = despachos.length;
+
+  var cards = document.getElementById('osan-cards');
+  if(cards) cards.innerHTML = [
+    {l:'Despachos', v:nDesp,              cc:'var(--c1)'},
+    {l:'🫙 Bachas',  v:totalB+' u',        cc:'var(--c2)'},
+    {l:'🪣 Baldes',  v:totalV+' u',        cc:'var(--c3)'},
+    {l:'Total kg',  v:totalKg.toFixed(2)+' kg', cc:'var(--grn)'},
+  ].map(function(c) {
+    return '<div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r2);padding:.65rem 1rem;text-align:center;min-width:100px">'
+      +'<div style="font-size:.66rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted2)">'+c.l+'</div>'
+      +'<div style="font-family:JetBrains Mono,monospace;font-size:1.25rem;font-weight:700;color:'+c.cc+'">'+c.v+'</div>'
+      +'</div>';
+  }).join('');
+
+  // Detail table
+  var tbody = document.getElementById('osan-tbody');
+  if(tbody) {
+    tbody.innerHTML = despachos.length ? despachos.map(function(d) {
+      var nom = (articulos[d.cod] && articulos[d.cod].nombre) ? articulos[d.cod].nombre : '';
+      return '<tr>'
+        +'<td style="font-size:.76rem;color:var(--muted2)">'+d.fecha+'</td>'
+        +'<td style="font-size:.76rem;color:var(--muted2)">'+d.hora+'</td>'
+        +'<td class="td-cod">'+d.cod+'</td>'
+        +'<td style="font-size:.78rem;color:var(--muted2)">'+nom+'</td>'
+        +'<td style="font-size:.78rem">'+(d.recip==='BACHA'?'🫙 Bacha':'🪣 Balde')+'</td>'
+        +'<td class="mono" style="font-size:.78rem">'+d.cant+'</td>'
+        +'<td class="mono c1" style="font-size:.78rem">'+(d.peso||0).toFixed(3)+'</td>'
+        +'</tr>';
+    }).join('')
+    : '<tr><td colspan="7"><div class="empty"><div class="eico">🚐</div>Sin despachos a OSAN'+
+      (mesFilt ? ' en este período' : '')+'</div></td></tr>';
+  }
+
+  // Resumen por sabor
+  var bySabor = {};
+  despachos.forEach(function(d) {
+    if(!bySabor[d.cod]) bySabor[d.cod] = {bachas:0,baldes:0,kgB:0,kgV:0};
+    if(d.recip==='BACHA') { bySabor[d.cod].bachas+=d.cant||0; bySabor[d.cod].kgB+=d.peso||0; }
+    else                  { bySabor[d.cod].baldes+=d.cant||0; bySabor[d.cod].kgV+=d.peso||0; }
+  });
+  var rTbody = document.getElementById('osan-resumen-tbody');
+  if(rTbody) {
+    var rCodes = Object.keys(bySabor).sort(function(a,b){return +a-+b;});
+    rTbody.innerHTML = rCodes.length ? rCodes.map(function(c) {
+      var s = bySabor[c];
+      var nom = (articulos[c] && articulos[c].nombre) ? articulos[c].nombre : '';
+      var totalKgC = s.kgB + s.kgV;
+      return '<tr>'
+        +'<td class="td-cod">'+c+'</td>'
+        +'<td style="font-size:.78rem;color:var(--muted2)">'+nom+'</td>'
+        +'<td class="mono" style="font-size:.78rem">'+s.bachas+'</td>'
+        +'<td class="mono" style="font-size:.78rem">'+s.baldes+'</td>'
+        +'<td class="mono c1" style="font-size:.78rem;font-weight:600">'+totalKgC.toFixed(3)+' kg</td>'
+        +'</tr>';
+    }).join('')
+    : '<tr><td colspan="5"><div class="empty"><div class="eico">📊</div>Sin datos</div></td></tr>';
+  }
+}
+
+function exportOSAN() {
+  var sel = document.getElementById('osan-mes');
+  var mesFilt = sel ? sel.value : '';
+  var despachos = DATA_despachos.filter(function(d) {
+    if(d.destino !== 'osan') return false;
+    if(!mesFilt) return true;
+    if(!d.fecha) return false;
+    var parts = d.fecha.split('/');
+    return parts.length >= 3 && parts[2]+'-'+parts[1] === mesFilt;
+  });
+
+  var wb = XLSX.utils.book_new();
+
+  // Detalle
+  var rows = [['Fecha','Hora','Código','Nombre','Recipiente','Cantidad','Kg']];
+  despachos.forEach(function(d) {
+    var nom = (articulos[d.cod] && articulos[d.cod].nombre) ? articulos[d.cod].nombre : '';
+    rows.push([d.fecha, d.hora, +d.cod, nom, d.recip, d.cant||0, d.peso||0]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), 'Detalle OSAN');
+
+  // Resumen por sabor
+  var bySabor = {};
+  despachos.forEach(function(d) {
+    if(!bySabor[d.cod]) bySabor[d.cod]={bachas:0,baldes:0,kg:0};
+    if(d.recip==='BACHA') bySabor[d.cod].bachas+=d.cant||0;
+    else bySabor[d.cod].baldes+=d.cant||0;
+    bySabor[d.cod].kg+=(d.peso||0);
+  });
+  var rRows = [['Código','Nombre','Bachas','Baldes','Total kg']];
+  Object.keys(bySabor).sort(function(a,b){return +a-+b;}).forEach(function(c) {
+    var s=bySabor[c];
+    var nom=(articulos[c]&&articulos[c].nombre)?articulos[c].nombre:'';
+    rRows.push([+c,nom,s.bachas,s.baldes,s.kg]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rRows), 'Resumen por sabor');
+
+  var label = mesFilt ? mesFilt : 'Todo';
+  XLSX.writeFile(wb, 'OSAN_Reparto_'+label+'.xlsx');
+  toast('Excel exportado', 'ok');
+// ══════════════════════════════════════════════════════════════════════════════
+// DESPACHOS EN BLOQUE — Fábrica → Locales
+// ══════════════════════════════════════════════════════════════════════════════
+var despRecip = null;
+var despItems = [];  // [{cod, nom, recip, cant, peso}]
+
+function setDespRecip(tipo, btn) {
+  despRecip = tipo;
+  var bB = document.getElementById('d-btn-b');
+  var bV = document.getElementById('d-btn-v');
+  bB.style.background = 'var(--s2)'; bB.style.borderColor = 'var(--border)'; bB.style.color = 'var(--txt)';
+  bV.style.background = 'var(--s2)'; bV.style.borderColor = 'var(--border)'; bV.style.color = 'var(--txt)';
+  btn.style.background = 'linear-gradient(135deg,var(--c1),#00b890)';
+  btn.style.borderColor = 'var(--c1)'; btn.style.color = '#050d14';
+}
+
+function normalizeDespPeso(input) {
+  var peso = parsePeso(input.value);
+  var w = document.getElementById('d-peso-warn');
+  if(!w) return;
+  if(peso > 10 && input.value.indexOf('.') < 0 && input.value.indexOf(',') < 0) {
+    w.style.color='var(--red)'; w.textContent='Quiso decir '+(peso/1000).toFixed(3)+' kg?';
+  } else if(despRecip==='BACHA'&&peso>5){w.style.color='var(--yel)';w.textContent='Peso alto para bacha (~4.5 kg max)';}
+  else if(despRecip==='BALDE'&&peso>10){w.style.color='var(--yel)';w.textContent='Peso alto para balde (~9 kg max)';}
+  else if(peso>0){w.style.color='var(--grn)';w.textContent=peso.toFixed(3)+' kg';}
+  else w.textContent='';
+}
+
+function addDespItem() {
+  var cod  = document.getElementById('d-cod').value.trim();
+  var cant = parseInt(document.getElementById('d-cant').value)||1;
+  var peso = parsePeso(document.getElementById('d-peso').value);
+  if(!cod)   { toast('Ingresa el codigo','err'); return; }
+  if(!despRecip) { toast('Selecciona bacha o balde','err'); return; }
+  if(!peso || peso <= 0) { toast('Ingresa el peso','err'); return; }
+  if(!getAllCodes().includes(String(cod))) { toast('Codigo no encontrado','err'); return; }
+  var nom = (articulos[cod]&&articulos[cod].nombre)?articulos[cod].nombre:'';
+  despItems.push({cod:String(cod), nom:nom, recip:despRecip, cant:cant, peso:peso});
+  // Clear inputs
+  document.getElementById('d-cod').value='';
+  document.getElementById('d-cant').value='1';
+  document.getElementById('d-peso').value='';
+  document.getElementById('d-peso-warn').textContent='';
+  despRecip=null;
+  var bB=document.getElementById('d-btn-b'), bV=document.getElementById('d-btn-v');
+  if(bB){bB.style.background='var(--s2)';bB.style.borderColor='var(--border)';bB.style.color='var(--txt)';}
+  if(bV){bV.style.background='var(--s2)';bV.style.borderColor='var(--border)';bV.style.color='var(--txt)';}
+  renderDespLista();
+  toast('Articulo agregado a la lista','ok');
+}
+
+function renderDespLista() {
+  var wrap = document.getElementById('desp-lista-wrap');
+  var tbody = document.getElementById('desp-lista-tbody');
+  var totalEl = document.getElementById('desp-total-kg');
+  if(!wrap||!tbody) return;
+  wrap.style.display = despItems.length ? '' : 'none';
+  var totalKg = despItems.reduce(function(s,d){return s+d.peso;},0);
+  if(totalEl) totalEl.textContent = totalKg.toFixed(3)+' kg';
+  tbody.innerHTML = despItems.map(function(d,i) {
+    return '<tr>'
+      +'<td class="td-cod">'+d.cod+'</td>'
+      +'<td style="font-size:.76rem;color:var(--muted2)">'+d.nom+'</td>'
+      +'<td style="font-size:.76rem">'+(d.recip==='BACHA'?'🫙':'🪣')+'</td>'
+      +'<td class="mono" style="font-size:.76rem">'+d.cant+'</td>'
+      +'<td class="mono c1" style="font-size:.76rem">'+d.peso.toFixed(3)+'</td>'
+      +'<td><button onclick="removeDespItem('+i+')" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:.85rem">x</button></td>'
+      +'</tr>';
+  }).join('') || '<tr><td colspan="6"><div class="empty">Sin articulos</div></td></tr>';
+}
+
+function removeDespItem(i) {
+  despItems.splice(i,1);
+  renderDespLista();
+}
+
+function limpiarDespacho() {
+  despItems = [];
+  renderDespLista();
+}
+
+function confirmarDespachoBloque() {
+  var dest = document.getElementById('d-dest').value;
+  if(!dest)          { toast('Selecciona el local destino','err'); return; }
+  if(!despItems.length){ toast('Agrega al menos un articulo','err'); return; }
+
+  var now    = new Date();
+  var fecha  = now.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'});
+  var hora   = now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+  var ts     = now.getTime();
+  var usuario= SESSION ? SESSION.nombre : 'Fabrica';
+
+  // Generar ID de bloque para agrupar las notificaciones
+  var bloqueId = 'bloque_'+ts;
+
+  despItems.forEach(function(item, idx) {
+    var cod = item.cod;
+    var cant= item.cant;
+    var peso= item.peso;
+    var recip=item.recip;
+
+    // Egreso en Fabrica
+    var stk = state['fabrica'].stock[cod] || {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+    if(recip==='BACHA'){ stk.bachas=Math.max(0,(stk.bachas||0)-cant); stk.kg_bachas=Math.max(0,(stk.kg_bachas||0)-peso); }
+    else               { stk.baldes=Math.max(0,(stk.baldes||0)-cant); stk.kg_baldes=Math.max(0,(stk.kg_baldes||0)-peso); }
+    state['fabrica'].stock[cod]=stk;
+
+    var egresoEntry={ts:ts+idx*2,fecha:fecha,hora:hora,loc:'fabrica',usuario:usuario,cod:cod,tipo:'EGRESO',recip:recip,cant:cant,pesoTotal:peso,pesoUnit:peso/cant,nom:item.nom,esDespacho:true,destino:dest,bloqueId:bloqueId};
+    state['fabrica'].history.unshift(egresoEntry);
+    globalHistory.unshift(egresoEntry);
+
+    // Ingreso en destino (excepto OSAN)
+    if(dest!=='osan') {
+      var stkD=state[dest].stock[cod]||{bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+      if(recip==='BACHA'){ stkD.bachas=(stkD.bachas||0)+cant; stkD.kg_bachas=(stkD.kg_bachas||0)+peso; }
+      else               { stkD.baldes=(stkD.baldes||0)+cant; stkD.kg_baldes=(stkD.kg_baldes||0)+peso; }
+      state[dest].stock[cod]=stkD;
+      if(dest!=='osan') saveStock(dest, cod);
+    }
+
+    var ingresoEntry={ts:ts+idx*2+1,fecha:fecha,hora:hora,loc:dest,usuario:usuario,cod:cod,tipo:'INGRESO',recip:recip,cant:cant,pesoTotal:peso,pesoUnit:peso/cant,nom:item.nom,esDespacho:true,origen:'fabrica',bloqueId:bloqueId};
+    state[dest].history.unshift(ingresoEntry);
+    globalHistory.unshift(ingresoEntry);
+
+    save();
+    saveStock('fabrica', cod);
+    saveHistorial(egresoEntry);
+    saveHistorial(ingresoEntry);
+  });
+
+  // Guardar despacho como bloque en DATA_despachos
+  var despRecord={
+    ts:ts, fecha:fecha, hora:hora, usuario:usuario,
+    destino:dest, bloqueId:bloqueId,
+    items: despItems.map(function(d){return {cod:d.cod,nom:d.nom,recip:d.recip,cant:d.cant,peso:d.peso};}),
+    totalKg: despItems.reduce(function(s,d){return s+d.peso;},0)
+  };
+  DATA_despachos.unshift(despRecord);
+  saveDespacho(despRecord);
+
+  var destNom = LOC_NAMES[dest]||dest;
+  toast('Despachado a '+destNom+' — '+despItems.length+' articulos','ok');
+  despItems=[];
+  renderDespLista();
+  document.getElementById('d-dest').value='';
+  renderAll();
+  renderDespachosHist();
+  renderNotifPanel();
+}
+
+function renderDespachosHist() {
+  var tbody=document.getElementById('despachos-tbody');
+  if(!tbody) return;
+  var recent=DATA_despachos.slice(0,15);
+  tbody.innerHTML=recent.length?recent.map(function(d){
+    var itemsCount = d.items ? d.items.length : 1;
+    var kg = d.totalKg || d.peso || 0;
+    var destNom = LOC_NAMES[d.destino]||d.destino||'—';
+    return '<tr>'
+      +'<td style="font-size:.75rem;color:var(--muted2)">'+d.fecha+' '+d.hora+'</td>'
+      +'<td><span class="loc-chip lc-'+(d.destino||'')+'">'+destNom+'</span></td>'
+      +'<td class="mono" style="font-size:.78rem">'+itemsCount+' art.</td>'
+      +'<td class="mono c1" style="font-size:.78rem">'+kg.toFixed(3)+' kg</td>'
+      +'</tr>';
+  }).join(''):'<tr><td colspan="4"><div class="empty"><div class="eico">🚚</div>Sin despachos</div></td></tr>';
+}
+
+function updateDespPrev() {}
+
 
 // ══════════════════════════════════════════════════════════════════════════════
 // OSAN REPARTO — Reportes
@@ -3098,7 +3479,150 @@ function toggleDespachosUI() {
   var pillIng = document.getElementById('pill-ing');
   if(pillIng) pillIng.style.display = isFab ? '' : 'none';
   if(!isFab && curTipo === 'INGRESO') { curTipo = null; }
+  // Pre-pedido tab: visible solo para sucursales (no admin, no fabrica)
+  var tabPedido = document.getElementById('tab-pedido');
+  if(tabPedido) {
+    var showPedido = SESSION && SESSION.rol==='sucursal' && SESSION.loc !== 'fabrica';
+    tabPedido.style.display = showPedido ? '' : 'none';
+  }
 }
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PRE-PEDIDO — Local → Fábrica
+// ══════════════════════════════════════════════════════════════════════════════
+
+function generarPedido() {
+  if(!SESSION) return;
+  var loc = SESSION.rol==='admin' ? curLoc : SESSION.loc;
+  document.getElementById('pedido-loc-lbl').textContent = (LOC_NAMES[loc]||loc) + ' — stock actual vs minimos y maximos';
+
+  var stk = (state[loc]&&state[loc].stock) ? state[loc].stock : {};
+  var lims= (state[loc]&&state[loc].limits)? state[loc].limits: {};
+  var allCodes = getAllCodes().sort(function(a,b){return +a-+b;});
+
+  var rows = [];
+  allCodes.forEach(function(c) {
+    var d = stk[c]  || {bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
+    var l = lims[String(c)] || {min_b:1,max_b:12,min_v:1,max_v:12};
+    var bachas = d.bachas||0;
+    var baldes = d.baldes||0;
+    var bajo = bachas < l.min_b || baldes < l.min_v;
+    if(bajo || bachas < l.max_b || baldes < l.max_v) {
+      var pedirB = Math.max(0, l.max_b - bachas);
+      var pedirV = Math.max(0, l.max_v - baldes);
+      if(pedirB > 0 || pedirV > 0) {
+        rows.push({
+          cod:c, nom:(articulos[c]&&articulos[c].nombre)?articulos[c].nombre:'',
+          bachas:bachas, baldes:baldes,
+          minB:l.min_b, maxB:l.max_b, minV:l.min_v, maxV:l.max_v,
+          pedirB:pedirB, pedirV:pedirV, bajo:bajo
+        });
+      }
+    }
+  });
+
+  // Summary cards
+  var cards = document.getElementById('pedido-cards');
+  var totalB = rows.reduce(function(s,r){return s+r.pedirB;},0);
+  var totalV = rows.reduce(function(s,r){return s+r.pedirV;},0);
+  var criticos = rows.filter(function(r){return r.bajo;}).length;
+  if(cards) cards.innerHTML = [
+    {l:'Sabores a pedir', v:rows.length, cc:'var(--c1)'},
+    {l:'Criticos (bajo minimo)', v:criticos, cc:'var(--red)'},
+    {l:'Bachas a pedir', v:totalB+' u', cc:'var(--c2)'},
+    {l:'Baldes a pedir', v:totalV+' u', cc:'var(--c3)'},
+  ].map(function(c) {
+    return '<div style="background:var(--s2);border:1px solid var(--border);border-radius:var(--r2);padding:.6rem .9rem;text-align:center;min-width:90px">'
+      +'<div style="font-size:.63rem;text-transform:uppercase;letter-spacing:.06em;color:var(--muted2)">'+c.l+'</div>'
+      +'<div style="font-family:JetBrains Mono,monospace;font-size:1.2rem;font-weight:700;color:'+c.cc+'">'+c.v+'</div>'
+      +'</div>';
+  }).join('');
+
+  // Table
+  var tbody = document.getElementById('pedido-tbody');
+  if(!tbody) return;
+  tbody.innerHTML = rows.length ? rows.map(function(r) {
+    var estadoCls = r.bajo ? 'dif-neg' : 'dif-pos';
+    var estadoLbl = r.bajo ? 'Critico' : 'Bajo maximo';
+    return '<tr>'
+      +'<td class="td-cod">'+r.cod+'</td>'
+      +'<td style="font-size:.78rem;color:var(--muted2)">'+r.nom+'</td>'
+      +'<td class="mono" style="font-size:.78rem">'
+        +'<span class="chip chip-b">'+r.bachas+'</span> '
+        +'<span class="chip chip-v">'+r.baldes+'</span>'
+      +'</td>'
+      +'<td class="mono" style="font-size:.76rem;color:var(--muted2)">'+r.minB+'/'+r.minV+'</td>'
+      +'<td class="mono" style="font-size:.76rem;color:var(--muted2)">'+r.maxB+'/'+r.maxV+'</td>'
+      +'<td style="background:rgba(0,229,180,.04)">'
+        +'<input class="conteo-input" type="number" id="ped-b-'+r.cod+'" min="0" value="'+r.pedirB+'" style="width:60px">'
+      +'</td>'
+      +'<td style="background:rgba(0,229,180,.04)">'
+        +'<input class="conteo-input" type="number" id="ped-v-'+r.cod+'" min="0" value="'+r.pedirV+'" style="width:60px">'
+      +'</td>'
+      +'<td><span class="dif-badge '+(r.bajo?'db-neg':'db-pos')+'">'+estadoLbl+'</span></td>'
+      +'</tr>';
+  }).join('') : '<tr><td colspan="8"><div class="empty"><div class="eico">Stock OK</div>Todos los sabores estan dentro de los maximos</div></td></tr>';
+
+  // Store rows for export
+  window._pedidoRows = rows;
+  window._pedidoLoc  = loc;
+}
+
+function exportPedido() {
+  var rows = window._pedidoRows || [];
+  if(!rows.length) { toast('Genera el pedido primero','err'); return; }
+  var loc = window._pedidoLoc || curLoc;
+  var wb = XLSX.utils.book_new();
+  var data = [['Codigo','Nombre','Stock bachas','Stock baldes','Min B','Max B','Min V','Max V','Pedir bachas','Pedir baldes']];
+  rows.forEach(function(r) {
+    var pedB = parseInt(document.getElementById('ped-b-'+r.cod)&&document.getElementById('ped-b-'+r.cod).value)||r.pedirB;
+    var pedV = parseInt(document.getElementById('ped-v-'+r.cod)&&document.getElementById('ped-v-'+r.cod).value)||r.pedirV;
+    data.push([+r.cod,r.nom,r.bachas,r.baldes,r.minB,r.maxB,r.minV,r.maxV,pedB,pedV]);
+  });
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(data), 'Pre-pedido');
+  var today = new Date().toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}).replace(/\//g,'-');
+  XLSX.writeFile(wb, 'PrePedido_'+(LOC_NAMES[loc]||loc)+'_'+today+'.xlsx');
+  toast('Excel exportado','ok');
+}
+
+function enviarPedidoFabrica() {
+  var rows = window._pedidoRows || [];
+  if(!rows.length) { toast('No hay nada que pedir — el stock esta OK','info'); return; }
+  var loc = window._pedidoLoc || curLoc;
+  var lineas = [];
+  rows.forEach(function(r) {
+    var pedB = parseInt(document.getElementById('ped-b-'+r.cod)&&document.getElementById('ped-b-'+r.cod).value)||0;
+    var pedV = parseInt(document.getElementById('ped-v-'+r.cod)&&document.getElementById('ped-v-'+r.cod).value)||0;
+    if(pedB>0||pedV>0) {
+      var nom = r.nom||('COD '+r.cod);
+      var linea = nom+(pedB>0?' — '+pedB+' bacha(s)':'')+(pedV>0?' — '+pedV+' balde(s)':'');
+      lineas.push(linea);
+    }
+  });
+  if(!lineas.length) { toast('Ajusta las cantidades primero','err'); return; }
+
+  // Save as notification for fabrica
+  var now = new Date();
+  var pedidoRecord = {
+    ts: now.getTime(),
+    fecha: now.toLocaleDateString('es-AR',{day:'2-digit',month:'2-digit',year:'numeric'}),
+    hora: now.toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}),
+    desde: loc,
+    usuario: SESSION ? SESSION.nombre : (LOC_NAMES[loc]||loc),
+    items: rows.map(function(r){
+      return {
+        cod:r.cod, nom:r.nom,
+        pedirB: parseInt(document.getElementById('ped-b-'+r.cod)&&document.getElementById('ped-b-'+r.cod).value)||0,
+        pedirV: parseInt(document.getElementById('ped-v-'+r.cod)&&document.getElementById('ped-v-'+r.cod).value)||0
+      };
+    }).filter(function(i){return i.pedirB>0||i.pedirV>0;})
+  };
+
+  fbPush('pedidos', pedidoRecord).then(function() {
+    toast('Pedido enviado a Fabrica', 'ok');
+  });
+}
+
 
 // INIT
 // ══════════════════════════════════════════════════════════════════════════════
