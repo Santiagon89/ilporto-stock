@@ -1189,16 +1189,6 @@ tbody tr:last-child td{border:none}
   
 
 
-<!-- MODAL DETALLE -->
-<div class="overlay" id="modal-overlay" onclick="closeModal(event)">
-  <div class="modal">
-    <div class="modal-hdr">
-      <h3 id="modal-title">Detalle</h3>
-      <button class="modal-close" onclick="closeModal()">✕</button>
-    </div>
-    <div id="modal-body"></div>
-  </div>
-</div>
 
 <!-- TOAST -->
 <div class="toast" id="toast"></div>
@@ -3248,7 +3238,7 @@ function renderDespachosHist() {
   var recent=DATA_despachos.slice(0,15);
   tbody.innerHTML=recent.length?recent.map(function(d){
     var itemsCount = d.items ? d.items.length : 1;
-    var kg = d.totalKg || d.peso || 0;
+    var kg = parseFloat(d.totalKg || d.peso || 0) || 0;
     var destNom = LOC_NAMES[d.destino]||d.destino||'—';
     return '<tr>'
       +'<td style="font-size:.75rem;color:var(--muted2)">'+d.fecha+' '+d.hora+'</td>'
@@ -3569,7 +3559,7 @@ function renderDespachosHist() {
       +'<td><span class="loc-chip lc-'+d.destino+'">'+LOC_ICONS[d.destino]+' '+(LOC_NAMES[d.destino]||d.destino)+'</span></td>'
       +'<td style="font-size:.78rem">'+(d.recip==='BACHA'?'🫙':'🪣')+'</td>'
       +'<td class="mono" style="font-size:.78rem">'+d.cant+'</td>'
-      +'<td class="mono c1" style="font-size:.78rem">'+d.peso.toFixed(3)+'</td>'
+      +'<td class="mono c1" style="font-size:.78rem">'+(parseFloat(d.peso||d.totalKg||0)||0).toFixed(3)+'</td>'
       +'</tr>';
   }).join('') : '<tr><td colspan="6"><div class="empty"><div class="eico">🚚</div>Sin despachos</div></td></tr>';
 }
@@ -3580,9 +3570,9 @@ function toggleDespachosUI() {
   var hist = document.getElementById('despachos-hist-card');
   if(card) card.style.display = isFab ? '' : 'none';
   if(hist) { hist.style.display = isFab ? '' : 'none'; if(isFab) renderDespachosHist(); }
+  // pill-ing visible para todos (locales tambien pueden registrar ingresos)
   var pillIng = document.getElementById('pill-ing');
-  if(pillIng) pillIng.style.display = isFab ? '' : 'none';
-  if(!isFab && curTipo === 'INGRESO') { curTipo = null; }
+  if(pillIng) pillIng.style.display = '';
   // Pre-pedido tab: visible solo para sucursales (no admin, no fabrica)
   var tabPedido = document.getElementById('tab-pedido');
   if(tabPedido) {
@@ -4007,6 +3997,17 @@ loadAuth().then(function() {
   });
 });
 </script>
+
+<!-- MODAL DETALLE -->
+<div class="overlay" id="modal-overlay" onclick="closeModal(event)">
+  <div class="modal">
+    <div class="modal-hdr">
+      <h3 id="modal-title">Detalle</h3>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
 </body>
 </html>  </div>
 
