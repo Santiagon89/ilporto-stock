@@ -3201,8 +3201,10 @@ function confirmarDespachoBloque() {
     }
 
     var ingresoEntry={ts:ts+idx*2+1,fecha:fecha,hora:hora,loc:dest,usuario:usuario,cod:cod,tipo:'INGRESO',recip:recip,cant:cant,pesoTotal:peso,pesoUnit:peso/cant,nom:item.nom,esDespacho:true,origen:'fabrica',bloqueId:bloqueId};
-    state[dest].history.unshift(ingresoEntry);
-    globalHistory.unshift(ingresoEntry);
+    if(dest !== 'osan' && state[dest]) {
+      state[dest].history.unshift(ingresoEntry);
+      globalHistory.unshift(ingresoEntry);
+    }
 
     save();
     saveStock('fabrica', cod);
@@ -3222,8 +3224,14 @@ function confirmarDespachoBloque() {
 
   var destNom = LOC_NAMES[dest]||dest;
   var totalKgDesp = despItems.reduce(function(s,d){return s+d.peso;},0);
-  showConfirmModal('🚚', 'Despacho registrado', 
-    LOC_NAMES[dest]+' · '+despItems.length+' sabores · '+totalKgDesp.toFixed(2)+' kg');
+  var totalBachas = despItems.reduce(function(s,d){return s+(d.recip==='BACHA'?d.cant:0);},0);
+  var totalBaldes = despItems.reduce(function(s,d){return s+(d.recip==='BALDE'?d.cant:0);},0);
+  var resumen = '';
+  if(totalBachas>0) resumen += totalBachas+' bachas';
+  if(totalBachas>0 && totalBaldes>0) resumen += ' · ';
+  if(totalBaldes>0) resumen += totalBaldes+' baldes';
+  resumen += ' · '+totalKgDesp.toFixed(2)+' kg';
+  showConfirmModal('🚚', 'Despacho a '+(LOC_NAMES[dest]||dest), resumen);
   despItems=[];
   renderDespLista();
   document.getElementById('d-dest').value='';
