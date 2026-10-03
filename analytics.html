@@ -204,10 +204,9 @@ tbody tr:hover{background:var(--surface-2)}
   <!-- ROTACION -->
   <section class="view" id="v-rotacion">
     <div class="filters">
-      <div class="f"><label>Local</label><select id="rLoc"><option value="todos" selected>Todos (resumen)</option><option value="puerto">Puerto</option><option value="gorlero">Gorlero</option><option value="labarra">La Barra</option><option value="fabrica">Fábrica</option></select></div>
-      <div class="f"><label>Demanda a usar</label><select id="rBase"><option value="max" selected>La mayor (real o temporada pasada)</option><option value="pasada">Temporada pasada</option><option value="real">Real reciente</option></select></div>
-      <div class="f"><label>Real: promedio de</label><select id="rVent"><option value="7">Últimos 7 días</option><option value="14">Últimos 14 días</option><option value="28" selected>Últimos 28 días</option></select></div>
-      <div class="f"><label>Fecha a simular</label><input type="date" id="rFecha"></div>
+      <div class="f"><label>Ver</label><select id="rLoc"><option value="todos" selected>Todos los locales</option><option value="puerto">Puerto</option><option value="gorlero">Gorlero</option><option value="labarra">La Barra</option><option value="fabrica">Fábrica</option></select></div>
+      <div class="f"><label>Ritmo de consumo</label><div class="seg" id="ritmoSeg"><button data-r="hoy" class="on">Hoy</button><button data-r="temp">Temporada</button></div></div>
+      <div class="f" id="wRef"><label>Temporada de referencia</label><select id="rRef"><option value="prom">Promedio dic–feb</option><option value="12">Diciembre</option><option value="1">Enero</option><option value="2">Febrero</option></select></div>
       <div class="hint" style="margin-left:auto;max-width:330px">Cobertura = stock ÷ consumo diario. ⛔ menos de 2 días · ⚠ 2 a 4 · ✓ 4 a 21 · 📦 más de 21</div>
     </div>
     <div class="banner" id="rNota"></div>
@@ -262,7 +261,7 @@ const DEFAULT_FAMS = ['Cremas','Chocolates','Dulce de leche','Frutales','Al agua
 /* ═══════════ STATE ═══════════ */
 let RAW = {hist:{},ped:{},stock:{},arts:{},fam:{}};
 let EV = {cons:[],prod:[],desp:[],ped:[],otros:[]};   // eventos normalizados
-let UNIT = 'kg', VIEW = 'resumen', GRAN = 'sem', NORM = 'dia';
+let RITMO = 'hoy', UNIT = 'kg', VIEW = 'resumen', GRAN = 'sem', NORM = 'dia';
 let trendSel = [];
 let charts = {};
 let famDraft = {}, famNames = [];
@@ -622,94 +621,94 @@ function rTemp(){
     {t:'Var.',sv:r=>isFinite(r.p)?r.p:1e9,f:r=>fmtPct(r.p)}],rows,{key:'temp'});
 }
 
-/* Demanda diaria por sabor y local.
-   Puerto: traslados de la temporada pasada (misma fecha −364 días, ventana ±7 días).
-   Gorlero / La Barra: lo de Puerto × su proporción real vs Puerto (últimos 28 días).
-   Fábrica: suma de los 3 locales. */
-function demandas(ref, base, win){
-  const now=Date.now(), rEnd=Math.min(ref,now)+DAY/2, rIni=rEnd-win*DAY;
-  const pc=ref-364*DAY, pIni=pc-7*DAY, pFin=pc+7*DAY;
-  const pasP={}; let pasTot=0;
-  EV.htras.forEach(e=>{if(e.ts>=pIni&&e.ts<=pFin){pasP[e.cod]=(pasP[e.cod]||0)+e.kg/15;pasTot+=e.kg/15;}});
-  const s28=l=>EV.cons.filter(e=>!e.pl&&e.loc===l&&e.ts>=now-28*DAY).reduce((x,e)=>x+e.kg,0);
+/* CONSUMO DIARIO POR SABOR
+   Hoy:        egresos reales de cada local, últimos 28 días.
+   Temporada:  Puerto = traslados de la temporada pasada (planillas) en el mes elegido / días con datos.
+               Gorlero y La Barra = Puerto × su proporción real vs Puerto (últimos 28 días).
+   Fábrica:    suma del consumo de los 3 locales (en los dos modos). Stock = stock propio de Fábrica. */
+function consumos(){
+  const now=Date.now(), W=28, ref=$('rRef').value;
+  const s28=l=>EV.cons.filter(e=>!e.pl&&e.loc===l&&e.ts>=now-W*DAY).reduce((x,e)=>x+e.kg,0);
   const P=s28('puerto'), fac={puerto:1,gorlero:P?s28('gorlero')/P:0,labarra:P?s28('labarra')/P:0};
-  const d={fabrica:{}}, last={};
+  // temporada (Puerto)
+  const tr=EV.htras.filter(e=>{const m=new Date(e.ts).getMonth()+1;return ref==='prom'?true:m===+ref;});
+  const dset=new Set(tr.map(e=>sod(e.ts))); let dT=dset.size;
+  if(tr.length){const a=Math.min(...tr.map(e=>e.ts)),b=Math.max(...tr.map(e=>e.ts));dT=Math.max(1,Math.round((sod(b)-sod(a))/DAY)+1);}
+  const tP={}; tr.forEach(e=>tP[e.cod]=(tP[e.cod]||0)+e.kg/dT);
+  const C={puerto:{},gorlero:{},labarra:{},fabrica:{}}, last={};
   LOCALES.forEach(l=>{
-    const src=EV.cons.filter(e=>!e.pl&&e.loc===l);
-    const first=src.length?src[0].ts:rEnd, dWin=Math.max(1,Math.min(win,(rEnd-first)/DAY));
-    const real={}; last[l]={};
-    src.forEach(e=>{last[l][e.cod]=e.ts; if(e.ts>=rIni&&e.ts<=rEnd) real[e.cod]=(real[e.cod]||0)+e.kg/dWin;});
-    d[l]={};
-    new Set([...Object.keys(real),...Object.keys(pasP)]).forEach(c=>{
-      const r=real[c]||0, p=(pasP[c]||0)*fac[l], u=base==='real'?r:base==='pasada'?p:Math.max(r,p);
-      d[l][c]={real:r,pasada:p,usada:u};
-      const f=d.fabrica[c]=d.fabrica[c]||{real:0,pasada:0,usada:0}; f.real+=r; f.pasada+=p; f.usada+=u;
-    });
+    const src=EV.cons.filter(e=>!e.pl&&e.loc===l); last[l]={};
+    const first=src.length?src[0].ts:now, dW=Math.max(1,Math.min(W,(now-first)/DAY));
+    src.forEach(e=>{last[l][e.cod]=e.ts; if(e.ts>=now-W*DAY){const o=C[l][e.cod]=C[l][e.cod]||{hoy:0,temp:0};o.hoy+=e.kg/dW;}});
+    Object.keys(tP).forEach(c=>{const o=C[l][c]=C[l][c]||{hoy:0,temp:0};o.temp=tP[c]*fac[l];});
+    Object.keys(C[l]).forEach(c=>{const f=C.fabrica[c]=C.fabrica[c]||{hoy:0,temp:0};f.hoy+=C[l][c].hoy;f.temp+=C[l][c].temp;});
   });
   last.fabrica={}; EV.desp.forEach(e=>last.fabrica[e.cod]=e.ts);
-  return {d,fac,pIni,pFin,pasTot,last};
+  const tot=(l,k)=>Object.values(C[l]).reduce((x,o)=>x+o[k],0);
+  return {C,fac,last,tot,dT,hayTemp:tr.length>0};
 }
 function estadoCob(stk,cd,sin){
   const cob=cd>0?stk/cd:(stk>0?Infinity:null);
   let e='ok';
   if(cd>0&&cob<2) e='quiebre'; else if(cd>0&&cob<4) e='justo';
   else if(stk>0&&cd===0&&(sin===null||sin>=14)) e='quieto'; else if(cob!==null&&cob>21) e='alto';
+  if(cob==null) e='na';
   return {cob,e};
 }
-const EST_LBL={quiebre:'<span class="st-crit">⛔</span>',justo:'<span class="st-warn">⚠</span>',quieto:'<span class="st-warn">💤</span>',alto:'<span class="st-warn">📦</span>',ok:'<span class="st-good">✓</span>'};
-const EST_TXT={quiebre:'Quiebre',justo:'Justo',quieto:'Quieto',alto:'Alto',ok:'OK'};
-const EST_ORD={quiebre:0,justo:1,quieto:2,alto:3,ok:4};
+const EST_LBL={na:'',quiebre:'<span class="st-crit">⛔</span>',justo:'<span class="st-warn">⚠</span>',quieto:'<span class="st-warn">💤</span>',alto:'<span class="st-warn">📦</span>',ok:'<span class="st-good">✓</span>'};
+const EST_TXT={na:'—',quiebre:'Quiebre',justo:'Justo',quieto:'Quieto',alto:'Alto',ok:'OK'};
+const EST_ORD={na:5,quiebre:0,justo:1,quieto:2,alto:3,ok:4};
 const cobTxt=c=>c===Infinity?'∞':(c==null?'—':fmt(c,1)+' d');
+const REFTXT={prom:'promedio dic–feb',12:'diciembre',1:'enero',2:'febrero'};
 
 function rRot(){
-  const loc=$('rLoc').value, win=+$('rVent').value, base=$('rBase').value, now=Date.now();
-  if(!$('rFecha').value) $('rFecha').value=new Date(now-new Date().getTimezoneOffset()*6e4).toISOString().slice(0,10);
-  const ref=new Date($('rFecha').value+'T12:00:00').getTime();
-  const D=demandas(ref,base,win), hayPas=D.pasTot>0;
-  const stkOf=(l,c)=>{const s=((RAW.stock||{})[l]||{})[c]||{};return {kg:(+s.kg_bachas||0)+(+s.kg_baldes||0),nb:+s.bachas||0,nv:+s.baldes||0};};
-  const sinOf=(l,c)=>{const t=D.last[l]&&D.last[l][c];return t?Math.max(0,Math.floor((now-t)/DAY)):null;};
-  $('rNota').innerHTML=`📅 ${new Date(ref).toLocaleDateString('es-UY',{weekday:'long',day:'numeric',month:'long',year:'numeric'})} · `+
-    (EV.htras.length?(hayPas?`Temporada pasada: ${new Date(D.pIni).toLocaleDateString('es-UY',{day:'numeric',month:'short'})} – ${new Date(D.pFin).toLocaleDateString('es-UY',{day:'numeric',month:'short',year:'numeric'})}: Puerto ${fmt(D.pasTot,0)} kg/día`:'La temporada pasada no tiene datos para esta fecha (planillas dic–feb). Para ver temporada, simulá una fecha entre el 1/12 y el 28/2.')
-      :'Sin histórico.')+
-    ` · Gorlero = ${fmt(D.fac.gorlero*100,0)}% de Puerto · La Barra = ${fmt(D.fac.labarra*100,0)}% de Puerto · Fábrica = suma de los 3 locales`;
+  const loc=$('rLoc').value, now=Date.now(), K=RITMO, X=consumos();
+  $('wRef').style.display=K==='temp'?'':'none';
+  const stkOf=(l,c)=>{const s=((RAW.stock||{})[l]||{})[c]||{};return (+s.kg_bachas||0)+(+s.kg_baldes||0);};
+  const sinOf=(l,c)=>{const t=X.last[l]&&X.last[l][c];return t?Math.max(0,Math.floor((now-t)/DAY)):null;};
+  const mult=X.tot('puerto','hoy')>0?X.tot('puerto','temp')/X.tot('puerto','hoy'):0;
+  $('rNota').innerHTML = K==='hoy'
+    ? `Ritmo <b>de hoy</b>: consumo real de los últimos 28 días. Fábrica = suma de Puerto + Gorlero + La Barra.`
+    : (X.hayTemp?`Ritmo <b>de temporada</b> (${REFTXT[$('rRef').value]} 25/26): Puerto ${fmt(X.tot('puerto','temp'),0)} kg/día vs ${fmt(X.tot('puerto','hoy'),0)} hoy (<b>x${fmt(mult,1)}</b>). Gorlero = ${fmt(X.fac.gorlero*100,0)}% y La Barra = ${fmt(X.fac.labarra*100,0)}% de Puerto. Fábrica = suma de los 3 locales.`:'No hay datos de temporada cargados.');
   const LS=['puerto','gorlero','labarra','fabrica'];
+  const cods=new Set(); LS.forEach(l=>{Object.keys(X.C[l]).forEach(c=>cods.add(c));Object.keys((RAW.stock||{})[l]||{}).forEach(c=>{if(stkOf(l,c)>0)cods.add(c);});});
+  const info=(l,c)=>{const o=X.C[l][c]||{hoy:0,temp:0},stk=stkOf(l,c),cd=o[K],x=estadoCob(stk,cd,sinOf(l,c));return {stk,cd,hoy:o.hoy,temp:o.temp,cob:x.cob,e:x.e};};
+  const sv=c=>c==null?1e9:c===Infinity?1e8:c;
   if(loc==='todos'){
-    const cods=new Set(); LS.forEach(l=>{Object.keys(D.d[l]||{}).forEach(c=>cods.add(c));Object.keys((RAW.stock||{})[l]||{}).forEach(c=>{if(stkOf(l,c).kg>0)cods.add(c);});});
-    const rows=[...cods].filter(famOk).map(c=>{const r={cod:c,nom:nombre(c),min:1e9,minE:'ok'};
-      LS.forEach(l=>{const st=stkOf(l,c),dm=(D.d[l]&&D.d[l][c])?D.d[l][c].usada:0,x=estadoCob(st.kg,dm,sinOf(l,c));
-        r[l]={stk:st.kg,dm,cob:x.cob,e:x.e}; const v=x.cob==null?1e9:x.cob===Infinity?1e8:x.cob; if(EST_ORD[x.e]<EST_ORD[r.minE]||(x.e===r.minE&&v<r.min)){r.minE=x.e;} if(v<r.min) r.min=v;});
-      return r;}).filter(r=>LS.some(l=>r[l].stk>0||r[l].dm>0)).sort((a,b)=>EST_ORD[a.minE]-EST_ORD[b.minE]||a.min-b.min);
-    $('rKpis').innerHTML=LS.map(l=>{const q=rows.filter(r=>r[l].e==='quiebre').length, j=rows.filter(r=>r[l].e==='justo').length;
-      const dm=rows.reduce((x,r)=>x+r[l].dm,0), st=rows.reduce((x,r)=>x+r[l].stk,0);
-      return `<div class="card kpi"><div class="lbl">${NAMES[l]}</div><div class="val"><span class="st-crit">⛔ ${q}</span> <span style="font-size:16px" class="st-warn">⚠ ${j}</span></div><div class="d">Stock ${fmt(st,0)} kg · consume ${fmt(dm,0)} kg/día · ${dm>0?fmt(st/dm,1)+' días':'—'}</div></div>`;}).join('');
-    $('rotTit').textContent='Cobertura en días por sabor'; $('rotSub').textContent='Ordenado por el sabor más urgente. Pasá el mouse por un valor para ver stock y consumo.';
-    const cell=l=>({t:NAMES[l],sv:r=>r[l].cob==null?1e9:r[l].cob===Infinity?1e8:r[l].cob,
-      f:r=>{const x=r[l];return `<span title="Stock ${fmt(x.stk,1)} kg · consumo ${fmt(x.dm,2)} kg/día">${EST_LBL[x.e]} ${cobTxt(x.cob)}</span>`;},
-      csv:r=>r[l].cob===Infinity?'inf':(r[l].cob==null?'':fmt(r[l].cob,1))});
-    table('rotTbl',[{t:'Sabor',l:1,k:'nom'}].concat(LS.map(cell)),rows,{key:'rot'});
+    const rows=[...cods].filter(famOk).map(c=>{const r={cod:c,nom:nombre(c)};let best=9,mn=1e9;
+      LS.forEach(l=>{r[l]=info(l,c);best=Math.min(best,EST_ORD[r[l].e]);mn=Math.min(mn,sv(r[l].cob));});r.ord=best;r.mn=mn;return r;})
+      .filter(r=>LS.some(l=>r[l].stk>0||r[l].cd>0)).sort((a,b)=>a.ord-b.ord||a.mn-b.mn);
+    $('rKpis').innerHTML=LS.map(l=>{const q=rows.filter(r=>r[l].e==='quiebre').length,j=rows.filter(r=>r[l].e==='justo').length;
+      const st=rows.reduce((x,r)=>x+r[l].stk,0),dm=rows.reduce((x,r)=>x+r[l].cd,0);
+      return `<div class="card kpi"><div class="lbl">${NAMES[l]}</div><div class="val" style="font-size:22px">${fmt(st,0)} kg · ${dm>0?fmt(st/dm,1)+' días':'—'}</div><div class="d"><span class="st-crit">⛔ ${q}</span> · <span class="st-warn">⚠ ${j}</span> sabores · consume ${fmt(dm,0)} kg/día</div></div>`;}).join('');
+    $('rotTit').textContent='Stock y cobertura por sabor'; $('rotSub').textContent='Ritmo: '+(K==='hoy'?'hoy':'temporada ('+REFTXT[$('rRef').value]+')')+' · los sabores más urgentes arriba';
+    const cols=[{t:'Sabor',l:1,k:'nom'}];
+    LS.forEach(l=>{
+      cols.push({t:NAMES[l]+' stock',sv:r=>r[l].stk,f:r=>r[l].stk>0?fmt(r[l].stk,1)+' kg':'<span class="hint">0</span>',csv:r=>fmt(r[l].stk,1)});
+      cols.push({t:'días',sv:r=>sv(r[l].cob),f:r=>`<span title="consume ${fmt(r[l].cd,2)} kg/día">${EST_LBL[r[l].e]} ${cobTxt(r[l].cob)}</span>`,csv:r=>r[l].cob===Infinity?'inf':(r[l].cob==null?'':fmt(r[l].cob,1))});
+    });
+    table('rotTbl',cols,rows,{key:'rot'});
+    // separador visual entre locales
+    $('rotTbl').querySelectorAll('tr').forEach(tr=>[...tr.children].forEach((td,i)=>{if(i>0&&i%2===1)td.style.borderLeft='1px solid var(--border)';}));
     return;
   }
-  // Detalle de un local
-  const dl=D.d[loc]||{}, stAll=(RAW.stock||{})[loc]||{};
-  const rows=[...new Set([...Object.keys(stAll),...Object.keys(dl)])].filter(famOk).map(c=>{
-    const st=stkOf(loc,c), x=dl[c]||{real:0,pasada:0,usada:0}, sin=sinOf(loc,c), e=estadoCob(st.kg,x.usada,sin);
-    return {cod:c,nom:nombre(c),fam:famOf(c),stk:st.kg,nb:st.nb,nv:st.nv,real:x.real,pasada:x.pasada,cd:x.usada,cob:e.cob,estado:e.e,sin,ord:EST_ORD[e.e]};
-  }).filter(r=>r.stk>0||r.cd>0).sort((a,b)=>a.ord-b.ord||(a.cob??1e9)-(b.cob??1e9));
-  const n=k=>rows.filter(r=>r.estado===k).length, dem=rows.reduce((x,r)=>x+r.cd,0), stT=rows.reduce((x,r)=>x+r.stk,0);
+  const rows=[...cods].filter(famOk).map(c=>{const x=info(loc,c);const xh=estadoCob(x.stk,x.hoy,sinOf(loc,c)),xt=estadoCob(x.stk,x.temp,sinOf(loc,c));
+      return {cod:c,nom:nombre(c),fam:famOf(c),...x,cobH:xh.cob,eH:xh.e,cobT:xt.cob,eT:xt.e,sin:sinOf(loc,c),ord:EST_ORD[x.e]};})
+    .filter(r=>r.stk>0||r.hoy>0||r.temp>0).sort((a,b)=>a.ord-b.ord||sv(a.cob)-sv(b.cob));
+  const n=k=>rows.filter(r=>r.e===k).length, st=rows.reduce((x,r)=>x+r.stk,0), dh=rows.reduce((x,r)=>x+r.hoy,0), dt=rows.reduce((x,r)=>x+r.temp,0);
   $('rKpis').innerHTML=[
-    ['<span class="st-crit">⛔ Menos de 2 días</span>',n('quiebre'),'sabores'],
-    ['<span class="st-warn">⚠ Entre 2 y 4 días</span>',n('justo'),'sabores'],
-    ['Consumo diario',fmt(dem,1)+' kg',loc==='fabrica'?'suma de los 3 locales':(hayPas?'temp. pasada: '+fmt(rows.reduce((x,r)=>x+r.pasada,0),1)+' kg/día':'real reciente')],
-    ['Stock total',fmt(stT,1)+' kg',dem>0?'cobertura total '+fmt(stT/dem,1)+' días':'']
+    ['Stock total',fmt(st,1)+' kg',rows.filter(r=>r.stk>0).length+' sabores con stock'],
+    ['Cobertura hoy',dh>0?fmt(st/dh,1)+' días':'—','consume '+fmt(dh,1)+' kg/día'],
+    ['Cobertura temporada',dt>0?fmt(st/dt,1)+' días':'—','consumiría '+fmt(dt,1)+' kg/día'],
+    ['<span class="st-crit">⛔ / ⚠ ('+(K==='hoy'?'hoy':'temporada')+')</span>',n('quiebre')+' / '+n('justo'),'sabores con menos de 2 / 4 días']
   ].map(k=>`<div class="card kpi"><div class="lbl">${k[0]}</div><div class="val">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('');
-  $('rotTit').textContent='Rotación por sabor · '+NAMES[loc]; $('rotSub').textContent=loc==='fabrica'?'Consumo = suma del consumo diario de Puerto, Gorlero y La Barra':'';
+  $('rotTit').textContent='Stock y cobertura · '+NAMES[loc]; $('rotSub').textContent=(loc==='fabrica'?'Consumo = suma de Puerto + Gorlero + La Barra. ':'')+'Ordenado por el ritmo elegido ('+(K==='hoy'?'hoy':'temporada')+').';
   const k2=v=>v>0?fmt(v,2)+' kg':'—';
-  table('rotTbl',[{t:'Estado',l:1,k:'ord',f:r=>EST_LBL[r.estado]+' '+EST_TXT[r.estado],csv:r=>EST_TXT[r.estado]},{t:'Sabor',l:1,k:'nom'},
-    {t:'Stock',k:'stk',f:r=>fmt(r.stk,1)+' kg <span class="hint">'+(r.nb?r.nb+'b ':'')+(r.nv?r.nv+'v':'')+'</span>',csv:r=>fmt(r.stk,2)},
-    {t:'Real/día',k:'real',f:r=>k2(r.real),csv:r=>fmt(r.real,2)},
-    {t:'Temp. pasada/día',k:'pasada',f:r=>k2(r.pasada),csv:r=>fmt(r.pasada,2)},
-    {t:'Usada/día',k:'cd',f:r=>'<b>'+k2(r.cd)+'</b>',csv:r=>fmt(r.cd,2)},
-    {t:'Cobertura',sv:r=>r.cob==null?-1:r.cob===Infinity?1e9:r.cob,f:r=>'<b>'+cobTxt(r.cob).replace(' d',' días')+'</b>',csv:r=>r.cob===Infinity?'inf':(r.cob==null?'':fmt(r.cob,1))},
+  table('rotTbl',[{t:'Sabor',l:1,k:'nom'},{t:'Stock',k:'stk',f:r=>fmt(r.stk,1)+' kg'},
+    {t:'Consumo hoy/día',k:'hoy',f:r=>k2(r.hoy),csv:r=>fmt(r.hoy,2)},
+    {t:'Cobertura hoy',sv:r=>sv(r.cobH),f:r=>EST_LBL[r.eH]+' '+cobTxt(r.cobH),csv:r=>r.cobH===Infinity?'inf':(r.cobH==null?'':fmt(r.cobH,1))},
+    {t:'Consumo temporada/día',k:'temp',f:r=>k2(r.temp),csv:r=>fmt(r.temp,2)},
+    {t:'Cobertura temporada',sv:r=>sv(r.cobT),f:r=>EST_LBL[r.eT]+' '+cobTxt(r.cobT),csv:r=>r.cobT===Infinity?'inf':(r.cobT==null?'':fmt(r.cobT,1))},
     {t:'Días sin salida',sv:r=>r.sin??9999,f:r=>r.sin==null?'—':r.sin}],rows,{key:'rot'});
 }
 
@@ -763,8 +762,8 @@ async function saveFamilias(){
 /* ═══════════ EVENTOS UI ═══════════ */
 $('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;VIEW=b.dataset.v;document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+VIEW));render();};
 const segBind=(id,attr,set)=>{$(id).onclick=e=>{const b=e.target.closest('button');if(!b)return;$(id).querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));set(b.dataset[attr]);render();};};
-segBind('unitSeg','u',v=>UNIT=v); segBind('granSeg','g',v=>GRAN=v); segBind('normSeg','n',v=>NORM=v);
-['fPeriodo','fMes','fTemp','fDesde','fHasta','fCanal','fFamilia','tA','tB','tLoc','rLoc','rVent','rBase','rFecha'].forEach(id=>$(id).addEventListener('change',render));
+segBind('unitSeg','u',v=>UNIT=v); segBind('ritmoSeg','r',v=>RITMO=v); segBind('granSeg','g',v=>GRAN=v); segBind('normSeg','n',v=>NORM=v);
+['fPeriodo','fMes','fTemp','fDesde','fHasta','fCanal','fFamilia','tA','tB','tLoc','rLoc','rRef'].forEach(id=>$(id).addEventListener('change',render));
 $('rankSearch').addEventListener('input',render);
 $('trendAdd').onchange=e=>{const c=e.target.value;if(c&&!trendSel.includes(c)){if(trendSel.length>=4)trendSel.shift();trendSel.push(c);}e.target.value='';render();};
 let rT;window.addEventListener('resize',()=>{clearTimeout(rT);rT=setTimeout(render,200);});
