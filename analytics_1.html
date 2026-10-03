@@ -1,0 +1,725 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Il Porto Analytics</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f4f3f0;--surface:#fcfcfb;--surface-2:#f0efec;--border:#e2e0db;
+  --text:#0b0b0b;--text-2:#52514e;--muted:#8a8984;--accent:#2a78d6;
+  --s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;
+  --good:#0ca30c;--warn:#fab219;--serious:#ec835a;--crit:#d03b3b;
+  --grid:#e8e6e1;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  color-scheme:dark;
+  --bg:#111110;--surface:#1a1a19;--surface-2:#262624;--border:#33332f;
+  --text:#fff;--text-2:#c3c2b7;--muted:#8d8c84;--accent:#3987e5;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--grid:#2c2c29;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#111110;--surface:#1a1a19;--surface-2:#262624;--border:#33332f;
+  --text:#fff;--text-2:#c3c2b7;--muted:#8d8c84;--accent:#3987e5;
+  --s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--grid:#2c2c29;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:20;background:var(--surface);border-bottom:1px solid var(--border)}
+.hwrap{max-width:1200px;margin:0 auto;padding:10px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.brand{font-weight:700;font-size:16px;margin-right:auto}
+.brand small{font-weight:400;color:var(--muted);margin-left:6px;font-size:12px}
+nav{max-width:1200px;margin:0 auto;padding:0 16px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:none}
+nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--text-2);padding:9px 12px;font:inherit;cursor:pointer;white-space:nowrap}
+nav button.on{color:var(--text);border-bottom-color:var(--accent);font-weight:600}
+main{max-width:1200px;margin:0 auto;padding:16px}
+.filters{display:flex;flex-wrap:wrap;gap:8px;align-items:end;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:14px}
+.f{display:flex;flex-direction:column;gap:3px;min-width:0}
+.f label{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.04em}
+select,input,button.btn{font:inherit;color:var(--text);background:var(--surface-2);border:1px solid var(--border);border-radius:7px;padding:6px 8px;min-height:34px}
+button.btn{cursor:pointer}
+button.btn.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
+.seg{display:inline-flex;border:1px solid var(--border);border-radius:7px;overflow:hidden}
+.seg button{border:0;background:var(--surface-2);color:var(--text-2);padding:6px 10px;font:inherit;cursor:pointer;min-height:34px}
+.seg button.on{background:var(--accent);color:#fff}
+.grid{display:grid;gap:14px}
+.g4{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:1fr 1fr}
+@media(max-width:860px){.g4{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}.kpi .val{font-size:20px}}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;min-width:0}
+.card h3{margin:0 0 2px;font-size:14px}
+.card .sub{color:var(--muted);font-size:12px;margin-bottom:10px}
+.kpi .lbl{font-size:12px;color:var(--text-2)}
+.kpi .val{font-size:26px;font-weight:700;margin-top:2px;font-variant-numeric:tabular-nums}
+.kpi .d{font-size:12px;margin-top:2px;color:var(--text-2)}
+.up{color:var(--good)}.down{color:var(--crit)}
+.chartbox{position:relative;height:320px}
+.chartbox.tall{height:440px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:7px 8px;border-bottom:1px solid var(--border);text-align:right;white-space:nowrap}
+th{font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.03em;font-weight:600;cursor:pointer;user-select:none;position:sticky;top:0;background:var(--surface)}
+th:first-child,td:first-child,th.l,td.l{text-align:left}
+tbody tr:hover{background:var(--surface-2)}
+.tw{overflow:auto;max-height:560px}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:2px 8px;border-radius:99px;background:var(--surface-2);color:var(--text-2)}
+.st-crit{color:var(--crit)}.st-warn{color:#b07800}.st-good{color:var(--good)}
+:root[data-theme="dark"] .st-warn{color:var(--warn)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .st-warn{color:var(--warn)}}
+.empty{padding:28px;text-align:center;color:var(--muted)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.hint{font-size:12px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:3px 6px 3px 8px;border-radius:99px;border:1px solid var(--border);background:var(--surface-2);font-size:12px}
+.chip i{width:10px;height:10px;border-radius:50%;display:inline-block}
+.chip button{border:0;background:none;color:var(--muted);cursor:pointer;font-size:14px;padding:0 2px}
+.bar{height:8px;border-radius:4px;background:var(--accent);opacity:.85}
+#login{position:fixed;inset:0;background:var(--bg);display:flex;align-items:center;justify-content:center;z-index:50}
+#login .card{width:min(320px,90vw);text-align:center}
+#login input{width:100%;text-align:center;font-size:20px;letter-spacing:.3em;margin:12px 0}
+#loading{position:fixed;inset:0;background:color-mix(in srgb,var(--bg) 85%,transparent);display:none;align-items:center;justify-content:center;z-index:40;font-weight:600}
+.view{display:none}.view.on{display:block}
+.mt{margin-top:14px}
+.banner{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text-2);margin-bottom:12px}
+</style>
+</head>
+<body>
+
+<div id="login"><div class="card">
+  <h3 style="font-size:18px">🍦 Il Porto Analytics</h3>
+  <div class="sub">Ingresá tu PIN</div>
+  <input id="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off">
+  <button class="btn pri" style="width:100%" onclick="doLogin()">Entrar</button>
+  <div id="pinerr" class="hint" style="margin-top:8px"></div>
+</div></div>
+<div id="loading">Cargando datos…</div>
+
+<header>
+  <div class="hwrap">
+    <div class="brand">🍦 Il Porto Analytics <small id="lastload"></small></div>
+    <div class="seg" id="unitSeg"><button data-u="kg" class="on">Kg</button><button data-u="un">Unidades</button></div>
+    <button class="btn" onclick="loadAll()" title="Recargar">↻</button>
+    <button class="btn" onclick="toggleTheme()" title="Tema">🌓</button>
+  </div>
+  <nav id="tabs">
+    <button data-v="resumen" class="on">Resumen</button>
+    <button data-v="ranking">Ranking</button>
+    <button data-v="tendencias">Tendencias</button>
+    <button data-v="temporadas">Temporadas</button>
+    <button data-v="rotacion">Rotación</button>
+    <button data-v="fabrica">Fábrica vs Pedidos</button>
+    <button data-v="config">Datos y familias</button>
+  </nav>
+</header>
+
+<main>
+  <div id="demoBanner" class="banner" style="display:none">⚠️ Modo demo: datos simulados (no se pudo leer Firebase o se abrió con ?demo=1).</div>
+
+  <!-- Filtros globales -->
+  <div class="filters" id="globalFilters">
+    <div class="f"><label>Período</label>
+      <select id="fPeriodo">
+        <option value="mes">Mes…</option>
+        <option value="u7">Últimos 7 días</option>
+        <option value="u30" selected>Últimos 30 días</option>
+        <option value="u90">Últimos 90 días</option>
+        <option value="temp">Temporada…</option>
+        <option value="todo">Todo el histórico</option>
+        <option value="custom">Rango personalizado</option>
+      </select></div>
+    <div class="f" id="wMes" style="display:none"><label>Mes</label><select id="fMes"></select></div>
+    <div class="f" id="wTemp" style="display:none"><label>Temporada</label><select id="fTemp"></select></div>
+    <div class="f" id="wDesde" style="display:none"><label>Desde</label><input type="date" id="fDesde"></div>
+    <div class="f" id="wHasta" style="display:none"><label>Hasta</label><input type="date" id="fHasta"></div>
+    <div class="f"><label>Canal</label>
+      <select id="fCanal">
+        <option value="locales">Locales (3)</option>
+        <option value="todos">Locales + OSAN</option>
+        <option value="puerto">Puerto</option>
+        <option value="gorlero">Gorlero</option>
+        <option value="labarra">La Barra</option>
+        <option value="osan">OSAN</option>
+      </select></div>
+    <div class="f"><label>Familia</label><select id="fFamilia"><option value="">Todas</option></select></div>
+    <div class="f" style="margin-left:auto"><label>&nbsp;</label><span class="hint" id="periodoTxt"></span></div>
+  </div>
+
+  <!-- RESUMEN -->
+  <section class="view on" id="v-resumen">
+    <div id="fixBanner" class="banner" style="display:none"></div>
+    <div class="grid g4" id="kpis"></div>
+    <div class="grid g2 mt">
+      <div class="card"><h3>Top 10 sabores</h3><div class="sub" id="topSub"></div><div class="chartbox"><canvas id="cTop"></canvas></div></div>
+      <div class="card"><h3>Consumo por canal</h3><div class="sub">Por semana, en el período</div><div class="chartbox"><canvas id="cCanal"></canvas></div></div>
+    </div>
+    <div class="grid g2 mt">
+      <div class="card"><h3>📈 Los que más suben</h3><div class="sub">vs período anterior de igual largo</div><div id="subenTbl"></div></div>
+      <div class="card"><h3>📉 Los que más bajan</h3><div class="sub">vs período anterior de igual largo</div><div id="bajanTbl"></div></div>
+    </div>
+  </section>
+
+  <!-- RANKING -->
+  <section class="view" id="v-ranking">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div><h3>Ranking de sabores</h3><div class="sub" id="rankSub"></div></div>
+        <div class="row"><input id="rankSearch" placeholder="Buscar sabor…"><button class="btn" onclick="exportCSV('rank')">⬇ CSV</button></div>
+      </div>
+      <div class="tw" id="rankTbl"></div>
+    </div>
+  </section>
+
+  <!-- TENDENCIAS -->
+  <section class="view" id="v-tendencias">
+    <div class="card">
+      <div class="row" style="justify-content:space-between">
+        <div><h3>Tendencia por sabor</h3><div class="sub">Elegí hasta 4 sabores para comparar. Usa el canal y la familia del filtro de arriba.</div></div>
+        <div class="row">
+          <div class="seg" id="granSeg"><button data-g="sem" class="on">Semanal</button><button data-g="mes">Mensual</button></div>
+          <select id="trendAdd"><option value="">+ Agregar sabor</option></select>
+        </div>
+      </div>
+      <div class="chips" id="trendChips"></div>
+      <div class="chartbox tall mt"><canvas id="cTrend"></canvas></div>
+      <div class="hint">El rango del gráfico es el período elegido arriba. Para ver la tendencia larga, elegí "Todo el histórico".</div>
+    </div>
+    <div class="card mt"><h3>Tabla de la tendencia</h3><div class="tw" id="trendTbl"></div></div>
+  </section>
+
+  <!-- TEMPORADAS -->
+  <section class="view" id="v-temporadas">
+    <div class="filters">
+      <div class="f"><label>Temporada A</label><select id="tA"></select></div>
+      <div class="f"><label>Temporada B</label><select id="tB"></select></div>
+      <div class="f"><label>Comparar por</label><div class="seg" id="normSeg"><button data-n="dia" class="on">Promedio por día</button><button data-n="total">Total</button></div></div>
+      <div class="hint" style="margin-left:auto;max-width:360px">Alta = dic–mar · Baja = abr–nov. "Por día" compara justo temporadas incompletas (ej. la actual en curso).</div>
+    </div>
+    <div class="grid g4" id="tKpis"></div>
+    <div class="card mt"><h3>Sabores: temporada A vs B</h3><div class="sub">Top 15 por volumen</div><div class="chartbox tall"><canvas id="cTemp"></canvas></div></div>
+    <div class="card mt"><div class="row" style="justify-content:space-between"><h3>Detalle por sabor</h3><button class="btn" onclick="exportCSV('temp')">⬇ CSV</button></div><div class="tw" id="tempTbl"></div></div>
+  </section>
+
+  <!-- ROTACION -->
+  <section class="view" id="v-rotacion">
+    <div class="filters">
+      <div class="f"><label>Local</label><select id="rLoc"><option value="puerto">Puerto</option><option value="gorlero">Gorlero</option><option value="labarra">La Barra</option><option value="fabrica">Fábrica</option></select></div>
+      <div class="f"><label>Consumo promedio de</label><select id="rVent"><option value="14">Últimos 14 días</option><option value="28" selected>Últimos 28 días</option><option value="56">Últimos 56 días</option></select></div>
+      <div class="hint" style="margin-left:auto;max-width:420px">Cobertura = stock actual ÷ consumo diario promedio. En Fábrica, el "consumo" son los despachos.</div>
+    </div>
+    <div class="grid g4" id="rKpis"></div>
+    <div class="card mt"><div class="row" style="justify-content:space-between"><h3>Rotación por sabor</h3><button class="btn" onclick="exportCSV('rot')">⬇ CSV</button></div><div class="tw" id="rotTbl"></div></div>
+  </section>
+
+  <!-- FABRICA -->
+  <section class="view" id="v-fabrica">
+    <div class="grid g4" id="fKpis"></div>
+    <div class="card mt"><h3>Producido vs Pedido vs Despachado</h3><div class="sub">Por semana, todos los sabores (respeta período y familia)</div><div class="chartbox"><canvas id="cFab"></canvas></div></div>
+    <div class="card mt"><div class="row" style="justify-content:space-between"><div><h3>Por sabor</h3><div class="sub">Pedido = lo que piden los locales en el Pre-pedido. Kg del pedido estimados con el peso promedio de cada sabor.</div></div><button class="btn" onclick="exportCSV('fab')">⬇ CSV</button></div><div class="tw" id="fabTbl"></div></div>
+  </section>
+
+  <!-- CONFIG -->
+  <section class="view" id="v-config">
+    <div class="card" style="margin-bottom:14px">
+      <div class="row" style="justify-content:space-between"><div><h3>⚠️ Movimientos corregidos</h3><div class="sub">Pesos fuera de rango (bacha 0,2–4,5 kg · balde 1–9 kg por unidad). Analytics los corrige al calcular, pero en la app de stock siguen como se cargaron.</div></div><button class="btn" onclick="exportCSV('fix')">⬇ CSV</button></div>
+      <div class="tw" id="fixTbl"></div>
+    </div>
+    <div class="card">
+      <h3>Familias de sabores</h3>
+      <div class="sub">Asigná cada sabor a una familia para usar el filtro. Se guarda en Firebase (nodo analytics/familias) y no toca la app de stock.</div>
+      <div class="row" style="margin-bottom:10px">
+        <input id="newFam" placeholder="Nueva familia (ej: Frutales)"><button class="btn" onclick="addFamilia()">Agregar familia</button>
+        <span class="hint" id="famList"></span>
+      </div>
+      <div class="tw" id="famTbl"></div>
+      <div class="row mt"><button class="btn pri" onclick="saveFamilias()">Guardar familias</button><span class="hint" id="famMsg"></span></div>
+    </div>
+    <div class="card mt">
+      <h3>Datos</h3>
+      <div class="sub" id="dataInfo"></div>
+      <div class="hint">La app guarda una copia del historial en analytics/archivo cada vez que la abrís. Así, si alguien usa "Iniciar prueba piloto" en la app de stock, las tendencias no se pierden.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+/* ═══════════ CONFIG ═══════════ */
+const FB = 'https://ilporto-stock-default-rtdb.firebaseio.com';
+const PIN = '1234';                      // ← cambiá tu PIN acá
+const LOCALES = ['puerto','gorlero','labarra'];
+const CANALES = ['puerto','gorlero','labarra','osan'];
+const NAMES = {fabrica:'Fábrica',puerto:'Puerto',gorlero:'Gorlero',labarra:'La Barra',osan:'OSAN'};
+const DAY = 864e5;
+const DEFAULT_FAMS = ['Cremas','Chocolates','Dulce de leche','Frutales','Al agua / Sorbetes','Especiales','Sin azúcar'];
+
+/* ═══════════ STATE ═══════════ */
+let RAW = {hist:{},ped:{},stock:{},arts:{},fam:{}};
+let EV = {cons:[],prod:[],desp:[],ped:[],otros:[]};   // eventos normalizados
+let UNIT = 'kg', VIEW = 'resumen', GRAN = 'sem', NORM = 'dia';
+let trendSel = [];
+let charts = {};
+let famDraft = {}, famNames = [];
+let lastTables = {};
+let DEMO = false;
+
+/* ═══════════ UTILS ═══════════ */
+const $ = id => document.getElementById(id);
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const fmt = (n,d=0) => (n==null||isNaN(n)) ? '—' : n.toLocaleString('es-UY',{minimumFractionDigits:d,maximumFractionDigits:d});
+const fmtV = n => UNIT==='kg' ? fmt(n,1)+' kg' : fmt(n,0)+' u';
+const pct = (a,b) => b>0 ? (a-b)/b*100 : (a>0?Infinity:NaN);
+const fmtPct = p => p===Infinity ? '<span class="up">nuevo</span>' : (isFinite(p)? `<span class="${p>=0?'up':'down'}">${p>=0?'▲':'▼'} ${fmt(Math.abs(p),0)}%</span>` : '—');
+const esc = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const sod = t => {const d=new Date(t);d.setHours(0,0,0,0);return d.getTime();};
+const weekKey = t => {const d=new Date(sod(t));const w=(d.getDay()+6)%7;d.setDate(d.getDate()-w);return d.getTime();};
+const monthKey = t => {const d=new Date(t);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');};
+const MESES = ['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','dic'];
+const monthLbl = k => {const [y,m]=k.split('-');return MESES[+m-1]+' '+y.slice(2);};
+const weekLbl = t => {const d=new Date(t);return d.getDate()+' '+MESES[d.getMonth()];};
+const val = e => UNIT==='kg' ? e.kg : e.u;
+function nombre(cod){const a=RAW.arts[cod];return (a&&a.nombre)||EV._nom[cod]||('Cód. '+cod);}
+function famOf(cod){return RAW.fam[cod]||'Sin familia';}
+
+/* Temporadas: Alta dic–mar, Baja abr–nov */
+function seasonOf(t){const d=new Date(t),m=d.getMonth(),y=d.getFullYear();
+  if(m===11) return 'A'+y; if(m<=2) return 'A'+(y-1); return 'B'+y;}
+function seasonRange(k){const y=+k.slice(1);
+  return k[0]==='A' ? [new Date(y,11,1).getTime(), new Date(y+1,3,1).getTime()-1]
+                    : [new Date(y,3,1).getTime(), new Date(y,11,1).getTime()-1];}
+function seasonLbl(k){const y=+k.slice(1);return k[0]==='A'?`Alta ${String(y).slice(2)}/${String(y+1).slice(2)}`:`Baja ${y}`;}
+
+/* ═══════════ LOGIN ═══════════ */
+function doLogin(){
+  if($('pin').value===PIN){try{sessionStorage.setItem('ipa_ok','1');}catch(e){} $('login').style.display='none'; loadAll();}
+  else{$('pinerr').textContent='PIN incorrecto';$('pin').value='';}
+}
+$('pin').addEventListener('keydown',e=>{if(e.key==='Enter')doLogin();});
+function toggleTheme(){
+  const r=document.documentElement, cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  const nx=cur==='dark'?'light':'dark'; r.setAttribute('data-theme',nx); try{localStorage.setItem('ipa_theme',nx);}catch(e){} render();
+}
+try{const t=localStorage.getItem('ipa_theme'); if(t) document.documentElement.setAttribute('data-theme',t);}catch(e){}
+
+/* ═══════════ FIREBASE ═══════════ */
+async function fbGet(p){const r=await fetch(FB+'/'+p+'.json');if(!r.ok)throw new Error('HTTP '+r.status);return r.json();}
+async function fbPatch(p,d){const r=await fetch(FB+'/'+p+'.json',{method:'PATCH',body:JSON.stringify(d)});if(!r.ok)throw new Error('HTTP '+r.status);}
+async function fbPut(p,d){const r=await fetch(FB+'/'+p+'.json',{method:'PUT',body:JSON.stringify(d)});if(!r.ok)throw new Error('HTTP '+r.status);}
+
+async function archive(node, live){
+  // Copia incremental: agrega al archivo las claves nuevas (no borra nunca)
+  let arch = {};
+  try{ arch = (await fbGet('analytics/archivo/'+node)) || {}; }catch(e){}
+  const nuevos = {}; let n=0;
+  Object.keys(live||{}).forEach(k=>{ if(!arch[k]){ nuevos[k]=live[k]; n++; } });
+  const keys = Object.keys(nuevos);
+  for(let i=0;i<keys.length;i+=400){
+    const chunk={}; keys.slice(i,i+400).forEach(k=>chunk[k]=nuevos[k]);
+    try{ await fbPatch('analytics/archivo/'+node, chunk); }catch(e){ console.warn('archivo',e); break; }
+  }
+  return Object.assign({}, arch, live||{});
+}
+
+async function loadAll(){
+  $('loading').style.display='flex';
+  DEMO = new URLSearchParams(location.search).has('demo');
+  try{
+    if(DEMO) throw new Error('demo');
+    const [hist,ped,stock,arts,fam] = await Promise.all([
+      fbGet('historial'), fbGet('pedidos'), fbGet('stock'), fbGet('articulos'), fbGet('analytics/familias')
+    ]);
+    RAW.hist  = await archive('historial', hist||{});
+    RAW.ped   = await archive('pedidos', ped||{});
+    RAW.stock = stock||{}; RAW.arts = arts||{}; RAW.fam = fam||{};
+  }catch(e){
+    console.warn('Usando datos demo:', e.message);
+    DEMO = true; Object.assign(RAW, makeDemo());
+  }
+  $('demoBanner').style.display = DEMO?'block':'none';
+  normalize();
+  buildSelectors();
+  $('lastload').textContent = 'act. '+new Date().toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'});
+  $('loading').style.display='none';
+  render();
+}
+
+/* ═══════════ NORMALIZACIÓN ═══════════
+   historial (Firebase no guarda esDespacho/destino):
+   - EGRESO en local            → consumo
+   - INGRESO en Fábrica         → producción
+   - EGRESO en Fábrica          → despacho si hay un INGRESO del mismo sabor con ts+1 (así lo graba la app); si no, "otros egresos"
+   - INGRESO en osan            → despacho a OSAN (cuenta como consumo del canal OSAN)
+   - INGRESO en local con ts-1  → recepción de despacho (no se cuenta dos veces)
+*/
+function normalize(){
+  const H = Object.values(RAW.hist||{}).filter(h=>h&&h.ts&&h.cod!=null);
+  EV = {cons:[],prod:[],desp:[],ped:[],otros:[],_nom:{}};
+  const ingByKey = {};
+  H.forEach(h=>{
+    h.cod=String(h.cod); h.cant=+h.cant||1; h.pesoTotal=+h.pesoTotal||0;
+    if(h.nom) EV._nom[h.cod]=h.nom;
+    if(h.tipo==='INGRESO' && h.loc!=='fabrica') ingByKey[h.cod+'|'+h.ts]=h;
+  });
+  // ── LIMPIEZA: rango válido de kg por unidad ──
+  const RANGO = {BACHA:[0.2,4.5], BALDE:[1,9]};
+  const okU = (u,r)=>{const g=RANGO[r]||[0.5,20];return u>=g[0]&&u<=g[1];};
+  const med = a=>{if(!a.length)return 0;a=[...a].sort((x,y)=>x-y);return a[Math.floor(a.length/2)];};
+  const byCR={}, byR={};
+  H.forEach(h=>{const u=h.pesoTotal/h.cant; if(h.pesoTotal>0&&okU(u,h.recip)){(byCR[h.cod+'|'+h.recip]=byCR[h.cod+'|'+h.recip]||[]).push(u);(byR[h.recip]=byR[h.recip]||[]).push(u);}});
+  const mCR={},mR={}; Object.keys(byCR).forEach(k=>mCR[k]=med(byCR[k])); Object.keys(byR).forEach(k=>mR[k]=med(byR[k]));
+  EV.wUnit = (cod,recip)=> mCR[cod+'|'+recip] || mR[recip] || (recip==='BALDE'?7:3.8);
+  EV.fix = [];
+  const kgOf = h=>{
+    const u=h.pesoTotal/h.cant;
+    if(okU(u,h.recip)) return h.pesoTotal;
+    let kg, motivo;
+    if(u>=100 && okU(u/1000,h.recip)){ kg=h.pesoTotal/1000; motivo='Cargado en gramos → ÷1000'; }
+    else { kg=h.cant*EV.wUnit(h.cod,h.recip); motivo= u>RANGO[h.recip||'BACHA'][1]?'Peso demasiado alto → estimado':'Peso demasiado bajo → estimado'; }
+    EV.fix.push({ts:h.ts,loc:h.loc,tipo:h.tipo,cod:h.cod,recip:h.recip,cant:h.cant,orig:h.pesoTotal,kg,motivo,usr:h.usuario||'—'});
+    return kg;
+  };
+  const mk = (h,loc)=>({ts:h.ts,loc,cod:h.cod,kg:kgOf(h),u:h.cant,b:h.recip==='BACHA'?h.cant:0,v:h.recip==='BALDE'?h.cant:0});
+  const usados = new Set();
+  H.forEach(h=>{
+    if(h.loc==='fabrica' && h.tipo==='INGRESO') EV.prod.push(mk(h,'fabrica'));
+    else if(h.loc==='fabrica' && h.tipo==='EGRESO'){
+      const ing = ingByKey[h.cod+'|'+(h.ts+1)];
+      if(ing){ usados.add(ing); EV.desp.push(mk(h,ing.loc)); if(ing.loc==='osan') EV.cons.push(mk(h,'osan')); }
+      else EV.otros.push(mk(h,'fabrica'));
+    }
+    else if(LOCALES.includes(h.loc) && h.tipo==='EGRESO') EV.cons.push(mk(h,h.loc));
+  });
+  // OSAN registrados sin egreso par (por si acaso)
+  H.forEach(h=>{ if(h.loc==='osan' && h.tipo==='INGRESO' && !usados.has(h)){ EV.desp.push(mk(h,'osan')); EV.cons.push(mk(h,'osan')); }});
+  // Pedidos de locales
+  Object.values(RAW.ped||{}).forEach(p=>{
+    if(!p||!p.ts||!p.items) return;
+    (Array.isArray(p.items)?p.items:Object.values(p.items)).forEach(i=>{
+      const cod=String(i.cod), b=+i.pedirB||0, v=+i.pedirV||0; if(!b&&!v) return;
+      if(i.nom) EV._nom[cod]=EV._nom[cod]||i.nom;
+      EV.ped.push({ts:p.ts,loc:p.desde,cod,b,v,u:b+v,kg:b*EV.wUnit(cod,'BACHA')+v*EV.wUnit(cod,'BALDE')});
+    });
+  });
+  Object.keys(EV).forEach(k=>Array.isArray(EV[k])&&EV[k].sort((a,b)=>a.ts-b.ts));
+  EV.minTs = Math.min(...[EV.cons,EV.prod,EV.desp,EV.ped].map(a=>a.length?a[0].ts:Date.now()));
+}
+
+/* ═══════════ FILTROS ═══════════ */
+function buildSelectors(){
+  // meses disponibles
+  const ms = new Set(); for(let t=sod(EV.minTs); t<=Date.now(); t+=DAY*27) ms.add(monthKey(t)); ms.add(monthKey(Date.now()));
+  const mArr=[...ms].sort().reverse();
+  $('fMes').innerHTML = mArr.map(k=>`<option value="${k}">${monthLbl(k)}</option>`).join('');
+  // temporadas
+  const ss = new Set(); for(let t=sod(EV.minTs); t<=Date.now(); t+=DAY*20) ss.add(seasonOf(t)); ss.add(seasonOf(Date.now()));
+  const sArr=[...ss].sort((a,b)=>seasonRange(b)[0]-seasonRange(a)[0]);
+  const opts = sArr.map(k=>`<option value="${k}">${seasonLbl(k)}</option>`).join('');
+  $('fTemp').innerHTML=opts; $('tA').innerHTML=opts; $('tB').innerHTML=opts;
+  // por defecto: A = temporada actual, B = la misma temporada del año anterior (o la previa)
+  const cur=seasonOf(Date.now()), prevSame=cur[0]+(+cur.slice(1)-1);
+  $('tA').value=cur; $('tB').value = sArr.includes(prevSame)?prevSame:(sArr[1]||cur);
+  // familias
+  famNames = [...new Set([...DEFAULT_FAMS, ...Object.values(RAW.fam||{})])];
+  const fSel=$('fFamilia').value;
+  $('fFamilia').innerHTML='<option value="">Todas</option>'+famNames.map(f=>`<option>${esc(f)}</option>`).join('')+'<option>Sin familia</option>';
+  $('fFamilia').value=fSel;
+  // sabores para tendencia
+  const cods = allCods().sort((a,b)=>nombre(a).localeCompare(nombre(b)));
+  $('trendAdd').innerHTML='<option value="">+ Agregar sabor</option>'+cods.map(c=>`<option value="${c}">${esc(nombre(c))}</option>`).join('');
+  if(!trendSel.length){ trendSel = rankBy(EV.cons.filter(e=>LOCALES.includes(e.loc)&&e.ts>Date.now()-90*DAY)).slice(0,3).map(r=>r.cod); }
+}
+function allCods(){const s=new Set();Object.keys(RAW.arts||{}).forEach(c=>s.add(String(c)));['cons','prod','desp','ped'].forEach(k=>EV[k].forEach(e=>s.add(e.cod)));return [...s];}
+
+function getRange(){
+  const p=$('fPeriodo').value, now=Date.now(), today=sod(now);
+  ['wMes','wTemp','wDesde','wHasta'].forEach(w=>$(w).style.display='none');
+  let a,b;
+  if(p==='mes'){ $('wMes').style.display=''; const [y,m]=$('fMes').value.split('-').map(Number); a=new Date(y,m-1,1).getTime(); b=new Date(y,m,1).getTime()-1; }
+  else if(p[0]==='u'){ const n=+p.slice(1); a=today-(n-1)*DAY; b=today+DAY-1; }
+  else if(p==='temp'){ $('wTemp').style.display=''; [a,b]=seasonRange($('fTemp').value); }
+  else if(p==='todo'){ a=sod(EV.minTs); b=today+DAY-1; }
+  else { $('wDesde').style.display='';$('wHasta').style.display='';
+    if(!$('fDesde').value){$('fDesde').value=new Date(today-29*DAY).toISOString().slice(0,10);$('fHasta').value=new Date(today).toISOString().slice(0,10);}
+    a=new Date($('fDesde').value+'T00:00').getTime(); b=new Date($('fHasta').value+'T23:59:59').getTime(); }
+  const len=b-a+1;
+  return {a,b,pa:a-len,pb:a-1,days:Math.max(1,Math.round(len/DAY))};
+}
+function canalOk(loc){const c=$('fCanal').value; if(c==='locales')return LOCALES.includes(loc); if(c==='todos')return CANALES.includes(loc); return loc===c;}
+function famOk(cod){const f=$('fFamilia').value; return !f || famOf(cod)===f;}
+function consIn(a,b){return EV.cons.filter(e=>e.ts>=a&&e.ts<=b&&canalOk(e.loc)&&famOk(e.cod));}
+function rankBy(arr){
+  const m={}; arr.forEach(e=>{const r=m[e.cod]=m[e.cod]||{cod:e.cod,kg:0,u:0,b:0,v:0};r.kg+=e.kg;r.u+=e.u;r.b+=e.b;r.v+=e.v;});
+  return Object.values(m).sort((x,y)=>val(y)-val(x));
+}
+
+/* ═══════════ CHART HELPERS ═══════════ */
+function mkChart(id,cfg){
+  if(charts[id]) charts[id].destroy();
+  const tx=css('--text-2'), gr=css('--grid');
+  Chart.defaults.color=tx; Chart.defaults.font.family='system-ui,-apple-system,Segoe UI,Roboto,sans-serif';
+  cfg.options=Object.assign({locale:'es-UY',responsive:true,maintainAspectRatio:false,animation:false,
+    interaction:{mode:'index',intersect:false},
+    plugins:{legend:{display:cfg.data.datasets.length>1,position:'top',align:'start',labels:{boxWidth:10,boxHeight:10,usePointStyle:true,pointStyle:'circle'}},
+      tooltip:{backgroundColor:css('--surface'),titleColor:css('--text'),bodyColor:css('--text-2'),borderColor:css('--border'),borderWidth:1,padding:10,
+        callbacks:{label:c=>' '+c.dataset.label+': '+fmtV(c.parsed[cfg.options&&cfg.options.indexAxis==='y'?'x':'y'])}}}},cfg.options||{});
+  const sc=cfg.options.scales||{};
+  ['x','y'].forEach(ax=>{sc[ax]=Object.assign({grid:{color:gr,drawTicks:false},border:{display:false},ticks:{padding:6}},sc[ax]||{});});
+  cfg.options.scales=sc;
+  charts[id]=new Chart($(id),cfg);
+}
+const SLOTS=()=>[css('--s1'),css('--s2'),css('--s3'),css('--s4')];
+const CH_COLOR=()=>({puerto:css('--s1'),gorlero:css('--s2'),labarra:css('--s3'),osan:css('--s4')});
+
+function buckets(a,b,g){
+  const out=[]; if(g==='mes'){let d=new Date(a);d=new Date(d.getFullYear(),d.getMonth(),1);while(d.getTime()<=b){out.push(monthKey(d.getTime()));d=new Date(d.getFullYear(),d.getMonth()+1,1);} }
+  else{for(let t=weekKey(a);t<=b;t+=7*DAY)out.push(t);} return out;
+}
+const bkey=(t,g)=>g==='mes'?monthKey(t):weekKey(t);
+const blbl=(k,g)=>g==='mes'?monthLbl(k):weekLbl(k);
+
+function table(id,cols,rows,opts={}){
+  lastTables[opts.key||id]={cols,rows};
+  if(!rows.length){$(id).innerHTML='<div class="empty">Sin datos para este filtro todavía.</div>';return;}
+  const st=table._sort[id]||{};
+  if(st.i!=null){const c=cols[st.i];rows=[...rows].sort((x,y)=>{const a=c.sv?c.sv(x):x[c.k],b=c.sv?c.sv(y):y[c.k];return (typeof a==='string'?a.localeCompare(b):(a-b))*st.d;});}
+  $(id).innerHTML=`<table><thead><tr>${cols.map((c,i)=>`<th class="${c.l?'l':''}" data-i="${i}">${c.t}${st.i===i?(st.d>0?' ▲':' ▼'):''}</th>`).join('')}</tr></thead><tbody>${
+    rows.map((r,ri)=>`<tr>${cols.map(c=>`<td class="${c.l?'l':''}">${c.f?c.f(r,ri):esc(r[c.k]??'')}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+  $(id).querySelectorAll('th').forEach(th=>th.onclick=()=>{const i=+th.dataset.i;const s=table._sort[id]||{};table._sort[id]={i,d:s.i===i?-s.d:-1};render();});
+}
+table._sort={};
+
+function exportCSV(key){
+  const t=lastTables[key]; if(!t) return;
+  const strip=s=>String(s??'').replace(/<[^>]+>/g,'').replace(/"/g,'""');
+  const lines=[t.cols.map(c=>'"'+strip(c.t)+'"').join(';')].concat(t.rows.map((r,i)=>t.cols.map(c=>{const v=c.csv?c.csv(r):(c.f?c.f(r,i):r[c.k]);return '"'+strip(v)+'"';}).join(';')));
+  const blob=new Blob(['﻿'+lines.join('\n')],{type:'text/csv;charset=utf-8'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ilporto_'+key+'_'+new Date().toISOString().slice(0,10)+'.csv';a.click();
+}
+
+/* ═══════════ RENDER ═══════════ */
+function render(){
+  if(!EV.cons) return;
+  const R=getRange();
+  $('periodoTxt').textContent = new Date(R.a).toLocaleDateString('es-UY')+' → '+new Date(R.b).toLocaleDateString('es-UY')+' ('+R.days+' días)';
+  $('globalFilters').style.display = (VIEW==='temporadas'||VIEW==='rotacion'||VIEW==='config')?'none':'flex';
+  ({resumen:rResumen,ranking:rRanking,tendencias:rTend,temporadas:rTemp,rotacion:rRot,fabrica:rFab,config:rConfig})[VIEW](R);
+}
+
+function rResumen(R){
+  const fx=fixList().filter(f=>f.ts>=R.a&&f.ts<=R.b);
+  $('fixBanner').style.display=fx.length?'block':'none';
+  $('fixBanner').innerHTML=`⚠️ ${fx.length} movimiento${fx.length>1?'s':''} con peso fuera de rango en este período, ya corregido${fx.length>1?'s':''} en los números. <a href="#" onclick="document.querySelector('#tabs [data-v=config]').click();return false">Ver detalle</a>`;
+  const cur=consIn(R.a,R.b), prev=consIn(R.pa,R.pb);
+  const tot=cur.reduce((s,e)=>s+val(e),0), totP=prev.reduce((s,e)=>s+val(e),0);
+  const rk=rankBy(cur), rkP=rankBy(prev), pm={}; rkP.forEach(r=>pm[r.cod]=val(r));
+  const prodTot=EV.prod.filter(e=>e.ts>=R.a&&e.ts<=R.b&&famOk(e.cod)).reduce((s,e)=>s+val(e),0);
+  $('kpis').innerHTML=[
+    ['Consumo del período',fmtV(tot),fmtPct(pct(tot,totP))+' vs anterior'],
+    ['Promedio diario',fmtV(tot/R.days),'en '+R.days+' días'],
+    ['Sabor #1',rk[0]?esc(nombre(rk[0].cod)):'—',rk[0]?fmtV(val(rk[0]))+' · '+fmt(val(rk[0])/(tot||1)*100,0)+'% del total':''],
+    ['Producción Fábrica',fmtV(prodTot),'sabores activos: '+rk.length]
+  ].map(k=>`<div class="card kpi"><div class="lbl">${k[0]}</div><div class="val">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('');
+  const top=rk.slice(0,10);
+  $('topSub').textContent=UNIT==='kg'?'Kilos consumidos':'Bachas + baldes consumidos';
+  mkChart('cTop',{type:'bar',data:{labels:top.map(r=>nombre(r.cod)),datasets:[{label:'Consumo',data:top.map(val),backgroundColor:css('--s1'),borderRadius:4,borderSkipped:'start',barPercentage:.7,categoryPercentage:.9}]},
+    options:{indexAxis:'y',scales:{y:{grid:{display:false}},x:{beginAtZero:true}}}});
+  // canal por semana
+  const bk=buckets(R.a,R.b,'sem'), cc=CH_COLOR();
+  const chans=$('fCanal').value==='locales'?LOCALES:($('fCanal').value==='todos'?CANALES:[$('fCanal').value]);
+  mkChart('cCanal',{type:'line',data:{labels:bk.map(k=>weekLbl(k)),datasets:chans.map(ch=>{
+    const m={};cur.filter(e=>e.loc===ch).forEach(e=>{const k=weekKey(e.ts);m[k]=(m[k]||0)+val(e);});
+    return {label:NAMES[ch],data:bk.map(k=>m[k]||0),borderColor:cc[ch],backgroundColor:cc[ch],borderWidth:2,pointRadius:3,pointHoverRadius:5,tension:.25};})},
+    options:{scales:{y:{beginAtZero:true}}}});
+  // movers
+  const all=new Set([...rk.map(r=>r.cod),...rkP.map(r=>r.cod)]);
+  const mv=[...all].map(c=>{const r=rk.find(x=>x.cod===c);const a=r?val(r):0,b=pm[c]||0;return {cod:c,a,b,d:a-b,p:pct(a,b)};}).filter(m=>m.a+m.b>0);
+  const cols=[{t:'Sabor',l:1,f:r=>esc(nombre(r.cod))},{t:'Actual',f:r=>fmtV(r.a)},{t:'Anterior',f:r=>fmtV(r.b)},{t:'Var.',f:r=>fmtPct(r.p)}];
+  table('subenTbl',cols,mv.filter(m=>m.d>0).sort((x,y)=>y.d-x.d).slice(0,6),{key:'suben'});
+  table('bajanTbl',cols,mv.filter(m=>m.d<0).sort((x,y)=>x.d-y.d).slice(0,6),{key:'bajan'});
+}
+
+function rRanking(R){
+  const cur=consIn(R.a,R.b), prev=consIn(R.pa,R.pb);
+  const rk=rankBy(cur), pm={}, pr={}; rankBy(prev).forEach((r,i)=>{pm[r.cod]=val(r);pr[r.cod]=i+1;});
+  const tot=rk.reduce((s,r)=>s+val(r),0), max=rk.length?val(rk[0]):1;
+  const q=$('rankSearch').value.toLowerCase();
+  // incluir sabores sin consumo (cola del ranking)
+  const sinMov = allCods().filter(c=>famOk(c)&&!rk.find(r=>r.cod===c)).map(c=>({cod:c,kg:0,u:0,b:0,v:0}));
+  let rows=rk.concat(sinMov).map((r,i)=>Object.assign(r,{pos:i+1,share:tot?val(r)/tot*100:0,prev:pm[r.cod]||0,p:pct(val(r),pm[r.cod]||0),dpos:pr[r.cod]?pr[r.cod]-(i+1):null,nom:nombre(r.cod),fam:famOf(r.cod),dia:val(r)/R.days}));
+  if(q) rows=rows.filter(r=>r.nom.toLowerCase().includes(q));
+  $('rankSub').textContent=`${rk.length} sabores con consumo · total ${fmtV(tot)} · ${$('fCanal').selectedOptions[0].text}`;
+  table('rankTbl',[
+    {t:'#',k:'pos',f:r=>r.pos+(r.dpos?` <span class="hint">${r.dpos>0?'↑'+r.dpos:'↓'+(-r.dpos)}</span>`:'')},
+    {t:'Sabor',l:1,k:'nom',f:r=>esc(r.nom)},
+    {t:'Familia',l:1,k:'fam',f:r=>`<span class="tag">${esc(r.fam)}</span>`,csv:r=>r.fam},
+    {t:UNIT==='kg'?'Kg':'Unidades',sv:r=>val(r),f:r=>fmtV(val(r)),csv:r=>fmt(val(r),1)},
+    {t:'',l:1,sv:r=>val(r),f:r=>`<div style="width:110px"><div class="bar" style="width:${Math.max(2,val(r)/max*100)}%"></div></div>`,csv:()=>''},
+    {t:'% total',k:'share',f:r=>fmt(r.share,1)+'%'},
+    {t:'Por día',k:'dia',f:r=>fmtV(r.dia),csv:r=>fmt(r.dia,2)},
+    {t:'Bachas',k:'b',f:r=>fmt(r.b)},{t:'Baldes',k:'v',f:r=>fmt(r.v)},
+    {t:'Período ant.',k:'prev',f:r=>fmtV(r.prev),csv:r=>fmt(r.prev,1)},
+    {t:'Var.',sv:r=>isFinite(r.p)?r.p:1e9,f:r=>fmtPct(r.p)}
+  ],rows,{key:'rank'});
+}
+
+function rTend(R){
+  const sl=SLOTS();
+  $('trendChips').innerHTML=trendSel.map((c,i)=>`<span class="chip"><i style="background:${sl[i]}"></i>${esc(nombre(c))}<button onclick="trendSel.splice(${i},1);render()">×</button></span>`).join('')||'<span class="hint">Agregá sabores con el selector.</span>';
+  const bk=buckets(R.a,R.b,GRAN);
+  const ds=trendSel.map((c,i)=>{const m={};EV.cons.filter(e=>e.cod===c&&e.ts>=R.a&&e.ts<=R.b&&canalOk(e.loc)).forEach(e=>{const k=bkey(e.ts,GRAN);m[k]=(m[k]||0)+val(e);});
+    return {label:nombre(c),data:bk.map(k=>m[k]||0),borderColor:sl[i],backgroundColor:sl[i],borderWidth:2,pointRadius:bk.length>30?0:3,pointHoverRadius:5,tension:.25};});
+  mkChart('cTrend',{type:'line',data:{labels:bk.map(k=>blbl(k,GRAN)),datasets:ds},options:{scales:{y:{beginAtZero:true}}}});
+  const rows=bk.map((k,i)=>{const r={per:blbl(k,GRAN)};ds.forEach((d,j)=>r['s'+j]=d.data[i]);return r;}).reverse();
+  table('trendTbl',[{t:GRAN==='mes'?'Mes':'Semana desde',l:1,k:'per'}].concat(ds.map((d,j)=>({t:esc(d.label),k:'s'+j,f:r=>fmtV(r['s'+j])}))),rows,{key:'trend'});
+}
+
+function rTemp(){
+  const A=$('tA').value,B=$('tB').value,[a1,a2]=seasonRange(A),[b1,b2]=seasonRange(B),now=Date.now();
+  const dA=Math.max(1,Math.round((Math.min(a2,now)-a1)/DAY)), dB=Math.max(1,Math.round((Math.min(b2,now)-b1)/DAY));
+  const fil=(x,y)=>EV.cons.filter(e=>e.ts>=x&&e.ts<=y&&CANALES.includes(e.loc)&&(LOCALES.includes(e.loc)||$('fCanal').value!=='locales'));
+  const cA=fil(a1,a2),cB=fil(b1,b2), nA=NORM==='dia'?dA:1, nB=NORM==='dia'?dB:1;
+  const rA=rankBy(cA),rB=rankBy(cB),mB={};rB.forEach(r=>mB[r.cod]=val(r));
+  const tA=rA.reduce((s,r)=>s+val(r),0),tB=rB.reduce((s,r)=>s+val(r),0);
+  const suf=NORM==='dia'?' /día':'';
+  $('tKpis').innerHTML=[
+    [seasonLbl(A),fmtV(tA/nA)+suf,dA+' días con datos'],
+    [seasonLbl(B),fmtV(tB/nB)+suf,cB.length?dB+' días con datos':'sin datos todavía'],
+    ['Variación A vs B',cB.length?fmtPct(pct(tA/nA,tB/nB)):'—','normalizado '+(NORM==='dia'?'por día':'total')],
+    ['#1 en '+seasonLbl(A),rA[0]?esc(nombre(rA[0].cod)):'—',rA[0]?fmtV(val(rA[0])/nA)+suf:'']
+  ].map(k=>`<div class="card kpi"><div class="lbl">${k[0]}</div><div class="val">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('');
+  const cods=[...new Set([...rA.map(r=>r.cod),...rB.map(r=>r.cod)])].filter(famOk);
+  const rows=cods.map(c=>{const ra=rA.find(r=>r.cod===c);const a=ra?val(ra)/nA:0,b=(mB[c]||0)/nB;return {cod:c,nom:nombre(c),fam:famOf(c),a,b,p:pct(a,b),sa:tA?a*nA/tA*100:0,sb:tB?b*nB/tB*100:0};}).sort((x,y)=>y.a-x.a);
+  const top=rows.slice(0,15),sl=SLOTS();
+  mkChart('cTemp',{type:'bar',data:{labels:top.map(r=>r.nom),datasets:[
+    {label:seasonLbl(A),data:top.map(r=>r.a),backgroundColor:sl[0],borderRadius:4,borderSkipped:'start'},
+    {label:seasonLbl(B),data:top.map(r=>r.b),backgroundColor:sl[1],borderRadius:4,borderSkipped:'start'}]},
+    options:{scales:{x:{grid:{display:false},ticks:{maxRotation:60,autoSkip:false}},y:{beginAtZero:true}}}});
+  table('tempTbl',[{t:'Sabor',l:1,k:'nom'},{t:'Familia',l:1,k:'fam'},
+    {t:seasonLbl(A)+suf,k:'a',f:r=>fmtV(r.a)},{t:'% mix A',k:'sa',f:r=>fmt(r.sa,1)+'%'},
+    {t:seasonLbl(B)+suf,k:'b',f:r=>fmtV(r.b)},{t:'% mix B',k:'sb',f:r=>fmt(r.sb,1)+'%'},
+    {t:'Var.',sv:r=>isFinite(r.p)?r.p:1e9,f:r=>fmtPct(r.p)}],rows,{key:'temp'});
+}
+
+function rRot(){
+  const loc=$('rLoc').value, win=+$('rVent').value, now=Date.now(), from=now-win*DAY;
+  const src = loc==='fabrica' ? EV.desp : EV.cons.filter(e=>e.loc===loc);
+  const st=(RAW.stock||{})[loc]||{};
+  const cods=[...new Set([...Object.keys(st),...src.map(e=>e.cod)])];
+  const firstTs = src.length?src[0].ts:now; const dWin=Math.max(1,Math.min(win,(now-firstTs)/DAY));
+  const rows=cods.map(c=>{
+    const s=st[c]||{}; const stkKg=(+s.kg_bachas||0)+(+s.kg_baldes||0), stkU=(+s.bachas||0)+(+s.baldes||0);
+    const ev=src.filter(e=>e.cod===c); const recent=ev.filter(e=>e.ts>=from);
+    const cKg=recent.reduce((x,e)=>x+e.kg,0)/dWin, cU=recent.reduce((x,e)=>x+e.u,0)/dWin;
+    const last=ev.length?ev[ev.length-1].ts:null; const sin=last?Math.max(0,Math.floor((now-last)/DAY)):null;
+    const stk=UNIT==='kg'?stkKg:stkU, cd=UNIT==='kg'?cKg:cU, cob=cd>0?stk/cd:(stk>0?Infinity:null);
+    let estado='ok'; if(stk>0&&(sin===null||sin>=14)) estado='quieto'; else if(cd>0&&cob<2) estado='quiebre'; else if(cob!==null&&cob>21) estado='alto';
+    return {cod:c,nom:nombre(c),fam:famOf(c),stk,cd,cob,sin,estado,ord:{quiebre:0,quieto:1,alto:2,ok:3}[estado]};
+  }).filter(r=>(r.stk>0||r.cd>0)&&famOk(r.cod)).sort((a,b)=>a.ord-b.ord||(a.cob??1e9)-(b.cob??1e9));
+  const n=k=>rows.filter(r=>r.estado===k).length;
+  $('rKpis').innerHTML=[
+    ['<span class="st-crit">⛔ Riesgo de quiebre</span>',n('quiebre'),'cobertura < 2 días'],
+    ['<span class="st-warn">💤 Quietos</span>',n('quieto'),'con stock y 14+ días sin salida'],
+    ['<span class="st-warn">📦 Sobre-stock</span>',n('alto'),'cobertura > 21 días'],
+    ['Stock total '+NAMES[loc],fmtV(rows.reduce((s,r)=>s+r.stk,0)),rows.length+' sabores']
+  ].map(k=>`<div class="card kpi"><div class="lbl">${k[0]}</div><div class="val">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('');
+  const lbl={quiebre:'<span class="st-crit">⛔ Quiebre</span>',quieto:'<span class="st-warn">💤 Quieto</span>',alto:'<span class="st-warn">📦 Alto</span>',ok:'<span class="st-good">✓ OK</span>'};
+  table('rotTbl',[{t:'Estado',l:1,k:'ord',f:r=>lbl[r.estado],csv:r=>r.estado},{t:'Sabor',l:1,k:'nom'},{t:'Familia',l:1,k:'fam'},
+    {t:'Stock actual',k:'stk',f:r=>fmtV(r.stk)},{t:'Consumo/día',k:'cd',f:r=>UNIT==='kg'?fmt(r.cd,2)+' kg':fmt(r.cd,2)+' u'},
+    {t:'Cobertura',sv:r=>r.cob??-1,f:r=>r.cob===Infinity?'∞':(r.cob==null?'—':fmt(r.cob,1)+' días')},
+    {t:'Días sin salida',sv:r=>r.sin??9999,f:r=>r.sin==null?'nunca':r.sin}],rows,{key:'rot'});
+}
+
+function rFab(R){
+  const inR=e=>e.ts>=R.a&&e.ts<=R.b&&famOk(e.cod);
+  const destOk=e=>canalOk(e.loc);
+  const P=EV.prod.filter(inR), Q=EV.ped.filter(e=>inR(e)&&destOk(e)), D=EV.desp.filter(e=>inR(e)&&destOk(e)), C=EV.cons.filter(e=>inR(e)&&destOk(e));
+  const s=a=>a.reduce((x,e)=>x+val(e),0);
+  const sp=s(P),sq=s(Q),sd=s(D),sc=s(C);
+  $('fKpis').innerHTML=[
+    ['Producido',fmtV(sp),'ingresos en Fábrica'],
+    ['Pedido por locales',fmtV(sq),Q.length?'pre-pedidos enviados':'sin pedidos en el período'],
+    ['Despachado',fmtV(sd),sq?'cumplimiento '+fmt(sd/sq*100,0)+'% del pedido':''],
+    ['Consumido en locales',fmtV(sc),sd?fmt(sc/sd*100,0)+'% de lo despachado':'']
+  ].map(k=>`<div class="card kpi"><div class="lbl">${k[0]}</div><div class="val">${k[1]}</div><div class="d">${k[2]}</div></div>`).join('');
+  const bk=buckets(R.a,R.b,'sem'),sl=SLOTS();
+  const ser=(arr)=>{const m={};arr.forEach(e=>{const k=weekKey(e.ts);m[k]=(m[k]||0)+val(e);});return bk.map(k=>m[k]||0);};
+  mkChart('cFab',{type:'bar',data:{labels:bk.map(weekLbl),datasets:[
+    {label:'Producido',data:ser(P),backgroundColor:sl[0],borderRadius:4,borderSkipped:'start'},
+    {label:'Pedido',data:ser(Q),backgroundColor:sl[1],borderRadius:4,borderSkipped:'start'},
+    {label:'Despachado',data:ser(D),backgroundColor:sl[2],borderRadius:4,borderSkipped:'start'}]},
+    options:{scales:{x:{grid:{display:false}},y:{beginAtZero:true}}}});
+  const by=(arr)=>{const m={};arr.forEach(e=>m[e.cod]=(m[e.cod]||0)+val(e));return m;};
+  const mp=by(P),mq=by(Q),md=by(D),mc=by(C);
+  const cods=[...new Set([...Object.keys(mp),...Object.keys(mq),...Object.keys(md)])];
+  const rows=cods.map(c=>{const p=mp[c]||0,q=mq[c]||0,d=md[c]||0,cn=mc[c]||0;return {cod:c,nom:nombre(c),p,q,d,cn,cum:q?d/q*100:null,bal:p-d};}).sort((a,b)=>b.q-a.q||b.p-a.p);
+  table('fabTbl',[{t:'Sabor',l:1,k:'nom'},{t:'Producido',k:'p',f:r=>fmtV(r.p)},{t:'Pedido',k:'q',f:r=>fmtV(r.q)},{t:'Despachado',k:'d',f:r=>fmtV(r.d)},
+    {t:'Cumplimiento',sv:r=>r.cum??-1,f:r=>r.cum==null?'—':`<span class="${r.cum<80?'st-crit':r.cum>120?'st-warn':'st-good'}">${r.cum<80?'⚠ ':''}${fmt(r.cum,0)}%</span>`,csv:r=>r.cum==null?'':fmt(r.cum,0)},
+    {t:'Prod − Desp',k:'bal',f:r=>fmtV(r.bal)},{t:'Consumido',k:'cn',f:r=>fmtV(r.cn)}],rows,{key:'fab'});
+}
+
+function fixList(){const seen=new Set();return (EV.fix||[]).filter(f=>{const k=f.ts+'|'+f.loc+'|'+f.cod;if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>b.ts-a.ts);}
+function rConfig(){
+  table('fixTbl',[{t:'Fecha',l:1,sv:r=>r.ts,f:r=>new Date(r.ts).toLocaleString('es-UY',{dateStyle:'short',timeStyle:'short'})},
+    {t:'Lugar',l:1,f:r=>NAMES[r.loc]||r.loc,csv:r=>NAMES[r.loc]||r.loc},{t:'Tipo',l:1,k:'tipo'},{t:'Sabor',l:1,sv:r=>nombre(r.cod),f:r=>esc(nombre(r.cod)),csv:r=>nombre(r.cod)},
+    {t:'Cant.',f:r=>r.cant+' '+(r.recip||'').toLowerCase(),csv:r=>r.cant+' '+r.recip},{t:'Cargado',k:'orig',f:r=>fmt(r.orig,3)+' kg'},
+    {t:'Usado',k:'kg',f:r=>fmt(r.kg,3)+' kg'},{t:'Motivo',l:1,k:'motivo'},{t:'Usuario',l:1,k:'usr'}],fixList(),{key:'fix'});
+  if(!Object.keys(famDraft).length) famDraft=Object.assign({},RAW.fam);
+  $('famList').textContent='Familias: '+famNames.join(' · ');
+  const cods=allCods().sort((a,b)=>nombre(a).localeCompare(nombre(b)));
+  $('famTbl').innerHTML=`<table><thead><tr><th class="l">Cód.</th><th class="l">Sabor</th><th class="l">Familia</th></tr></thead><tbody>${cods.map(c=>`<tr><td class="l">${esc(c)}</td><td class="l">${esc(nombre(c))}</td><td class="l"><select data-c="${esc(c)}" onchange="famDraft[this.dataset.c]=this.value"><option value="">— Sin familia —</option>${famNames.map(f=>`<option ${famDraft[c]===f?'selected':''}>${esc(f)}</option>`).join('')}</select></td></tr>`).join('')}</tbody></table>`;
+  $('dataInfo').textContent=`${Object.keys(RAW.hist).length} movimientos · ${EV.cons.length} egresos de consumo · ${EV.prod.length} ingresos de producción · ${EV.desp.length} despachos · ${EV.ped.length} líneas de pedido · datos desde ${new Date(EV.minTs).toLocaleDateString('es-UY')}`;
+}
+function addFamilia(){const v=$('newFam').value.trim();if(v&&!famNames.includes(v)){famNames.push(v);$('newFam').value='';rConfig();}}
+async function saveFamilias(){
+  const clean={};Object.keys(famDraft).forEach(c=>{if(famDraft[c])clean[c]=famDraft[c];});
+  if(DEMO){RAW.fam=clean;$('famMsg').textContent='Guardado (solo demo, no se escribe en Firebase)';buildSelectors();return;}
+  try{await fbPut('analytics/familias',clean);RAW.fam=clean;$('famMsg').textContent='✓ Guardado';buildSelectors();}catch(e){$('famMsg').textContent='Error al guardar: '+e.message;}
+}
+
+/* ═══════════ EVENTOS UI ═══════════ */
+$('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;VIEW=b.dataset.v;document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+VIEW));render();};
+const segBind=(id,attr,set)=>{$(id).onclick=e=>{const b=e.target.closest('button');if(!b)return;$(id).querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));set(b.dataset[attr]);render();};};
+segBind('unitSeg','u',v=>UNIT=v); segBind('granSeg','g',v=>GRAN=v); segBind('normSeg','n',v=>NORM=v);
+['fPeriodo','fMes','fTemp','fDesde','fHasta','fCanal','fFamilia','tA','tB','rLoc','rVent'].forEach(id=>$(id).addEventListener('change',render));
+$('rankSearch').addEventListener('input',render);
+$('trendAdd').onchange=e=>{const c=e.target.value;if(c&&!trendSel.includes(c)){if(trendSel.length>=4)trendSel.shift();trendSel.push(c);}e.target.value='';render();};
+let rT;window.addEventListener('resize',()=>{clearTimeout(rT);rT=setTimeout(render,200);});
+
+/* ═══════════ DEMO DATA ═══════════ */
+function makeDemo(){
+  const sab={1:'Dulce de leche',2:'Chocolate amargo',3:'Frutilla',4:'Limón',5:'Sambayón',6:'Pistacho',7:'Crema americana',8:'Maracuyá',9:'Tramontana',10:'Banana split',11:'Menta granizada',12:'Coco',13:'Frambuesa al agua',14:'Avellana',15:'Mascarpone'};
+  const fam={1:'Dulce de leche',2:'Chocolates',3:'Frutales',4:'Al agua / Sorbetes',5:'Cremas',6:'Especiales',7:'Cremas',8:'Frutales',9:'Dulce de leche',10:'Cremas',11:'Cremas',12:'Cremas',13:'Al agua / Sorbetes',14:'Especiales',15:'Especiales'};
+  const pop={1:10,2:8,3:6,4:4,5:3,6:5,7:4,8:3,9:7,10:2,11:3,12:2,13:2,14:4,15:3};
+  const fr={1:0,2:0,3:1,4:1,5:0,6:0,7:0,8:1,9:0,10:0,11:0,12:1,13:1,14:0,15:0};
+  const H={},P={},S={puerto:{},gorlero:{},labarra:{},fabrica:{}}; let id=0; const push=o=>H['d'+(id++)]=o;
+  const locW={puerto:1,gorlero:.8,labarra:.6}; let seed=7; const rnd=()=>(seed=(seed*16807)%2147483647)/2147483647;
+  const start=new Date(2025,11,1).getTime(), now=Date.now();
+  for(let t=start;t<now;t+=DAY){
+    const d=new Date(t),m=d.getMonth(); const sea=(m===11||m<=2)?1:(m===3||m===10?.45:.18); const wk=(d.getDay()===0||d.getDay()===6)?1.4:1;
+    Object.keys(sab).forEach(c=>{
+      const fruta=fr[c]&&sea>.5?1.3:1;
+      Object.keys(locW).forEach(l=>{
+        const lam=pop[c]*locW[l]*sea*wk*fruta*.35; let n=0; let x=rnd(); while(x>Math.exp(-lam)&&n<12){n++;x*=rnd()+.0001;}
+        n=Math.round(lam+ (rnd()-.5)*Math.sqrt(lam)*1.5); if(n<=0)return;
+        push({ts:t+15*36e5+Math.floor(rnd()*3e7),loc:l,cod:String(c),tipo:'EGRESO',recip:'BACHA',cant:n,pesoTotal:+(n*(3.6+rnd()*.6)).toFixed(2),nom:sab[c]});
+      });
+    });
+    if(d.getDay()>=1&&d.getDay()<=5) Object.keys(sab).forEach(c=>{
+      const n=Math.round(pop[c]*sea*2.4*(.8+rnd()*.4)); if(n<=0)return; const ts=t+8*36e5+Math.floor(rnd()*1e6);
+      push({ts,loc:'fabrica',cod:String(c),tipo:'INGRESO',recip:'BACHA',cant:n,pesoTotal:+(n*4).toFixed(1),nom:sab[c]});
+      ['puerto','gorlero','labarra','osan'].forEach((l,i)=>{const k=Math.round(n*[.32,.26,.2,.15][i]*(.8+rnd()*.4));if(!k)return;const t2=ts+36e5*(2+i)+c*10;
+        push({ts:t2,loc:'fabrica',cod:String(c),tipo:'EGRESO',recip:'BACHA',cant:k,pesoTotal:k*4,nom:sab[c]});
+        push({ts:t2+1,loc:l,cod:String(c),tipo:'INGRESO',recip:'BACHA',cant:k,pesoTotal:k*4,nom:sab[c]});});
+    });
+    if(d.getDay()===1||d.getDay()===4) ['puerto','gorlero','labarra'].forEach(l=>{P['p'+(id++)]={ts:t+10*36e5,desde:l,items:Object.keys(sab).map(c=>({cod:String(c),nom:sab[c],pedirB:Math.round(pop[c]*locW[l]*sea*1.3*(.7+rnd()*.6)),pedirV:0}))};});
+  }
+  Object.keys(sab).forEach(c=>Object.keys(S).forEach(l=>{const b=Math.round(rnd()*(c==10||c==12?14:6));S[l][c]={bachas:b,baldes:0,kg_bachas:b*4,kg_baldes:0};}));
+  const arts={};Object.keys(sab).forEach(c=>arts[c]={nombre:sab[c]});
+  return {hist:H,ped:P,stock:S,arts,fam};
+}
+
+/* ═══════════ INIT ═══════════ */
+let ok=false; try{ok=sessionStorage.getItem('ipa_ok')==='1';}catch(e){}
+if(ok||new URLSearchParams(location.search).has('demo')){$('login').style.display='none';loadAll();} else $('pin').focus();
+</script>
+</body>
+</html>
