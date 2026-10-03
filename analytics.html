@@ -109,7 +109,7 @@ tbody tr:hover{background:var(--surface-2)}
     <button data-v="temporadas">Temporadas</button>
     <button data-v="rotacion">Rotación</button>
     <button data-v="fabrica">Fábrica vs Pedidos</button>
-    <button data-v="config">Familias</button>
+    <button data-v="config">Datos y familias</button>
   </nav>
 </header>
 
@@ -147,6 +147,7 @@ tbody tr:hover{background:var(--surface-2)}
 
   <!-- RESUMEN -->
   <section class="view on" id="v-resumen">
+    <div id="fixBanner" class="banner" style="display:none"></div>
     <div class="grid g4" id="kpis"></div>
     <div class="grid g2 mt">
       <div class="card"><h3>Top 10 sabores</h3><div class="sub" id="topSub"></div><div class="chartbox"><canvas id="cTop"></canvas></div></div>
@@ -219,6 +220,10 @@ tbody tr:hover{background:var(--surface-2)}
 
   <!-- CONFIG -->
   <section class="view" id="v-config">
+    <div class="card" style="margin-bottom:14px">
+      <div class="row" style="justify-content:space-between"><div><h3>⚠️ Movimientos corregidos</h3><div class="sub">Pesos fuera de rango (bacha 0,2–4,5 kg · balde 1–9 kg por unidad). Analytics los corrige al calcular, pero en la app de stock siguen como se cargaron.</div></div><button class="btn" onclick="exportCSV('fix')">⬇ CSV</button></div>
+      <div class="tw" id="fixTbl"></div>
+    </div>
     <div class="card">
       <h3>Familias de sabores</h3>
       <div class="sub">Asigná cada sabor a una familia para usar el filtro. Se guarda en Firebase (nodo analytics/familias) y no toca la app de stock.</div>
@@ -348,18 +353,31 @@ async function loadAll(){
 function normalize(){
   const H = Object.values(RAW.hist||{}).filter(h=>h&&h.ts&&h.cod!=null);
   EV = {cons:[],prod:[],desp:[],ped:[],otros:[],_nom:{}};
-  const unitW = {}; // peso promedio por cod|recip
   const ingByKey = {};
   H.forEach(h=>{
     h.cod=String(h.cod); h.cant=+h.cant||1; h.pesoTotal=+h.pesoTotal||0;
     if(h.nom) EV._nom[h.cod]=h.nom;
-    if(h.pesoTotal>0){const k=h.cod+'|'+h.recip;(unitW[k]=unitW[k]||[0,0]);unitW[k][0]+=h.pesoTotal;unitW[k][1]+=h.cant;}
     if(h.tipo==='INGRESO' && h.loc!=='fabrica') ingByKey[h.cod+'|'+h.ts]=h;
   });
-  const recipAvg = {};
-  Object.keys(unitW).forEach(k=>{const r=k.split('|')[1];(recipAvg[r]=recipAvg[r]||[0,0]);recipAvg[r][0]+=unitW[k][0];recipAvg[r][1]+=unitW[k][1];});
-  EV.wUnit = (cod,recip)=>{const a=unitW[cod+'|'+recip]||recipAvg[recip];return a&&a[1]?a[0]/a[1]:0;};
-  const mk = (h,loc)=>({ts:h.ts,loc,cod:h.cod,kg:h.pesoTotal||h.cant*EV.wUnit(h.cod,h.recip),u:h.cant,b:h.recip==='BACHA'?h.cant:0,v:h.recip==='BALDE'?h.cant:0});
+  // ── LIMPIEZA: rango válido de kg por unidad ──
+  const RANGO = {BACHA:[0.2,4.5], BALDE:[1,9]};
+  const okU = (u,r)=>{const g=RANGO[r]||[0.5,20];return u>=g[0]&&u<=g[1];};
+  const med = a=>{if(!a.length)return 0;a=[...a].sort((x,y)=>x-y);return a[Math.floor(a.length/2)];};
+  const byCR={}, byR={};
+  H.forEach(h=>{const u=h.pesoTotal/h.cant; if(h.pesoTotal>0&&okU(u,h.recip)){(byCR[h.cod+'|'+h.recip]=byCR[h.cod+'|'+h.recip]||[]).push(u);(byR[h.recip]=byR[h.recip]||[]).push(u);}});
+  const mCR={},mR={}; Object.keys(byCR).forEach(k=>mCR[k]=med(byCR[k])); Object.keys(byR).forEach(k=>mR[k]=med(byR[k]));
+  EV.wUnit = (cod,recip)=> mCR[cod+'|'+recip] || mR[recip] || (recip==='BALDE'?7:3.8);
+  EV.fix = [];
+  const kgOf = h=>{
+    const u=h.pesoTotal/h.cant;
+    if(okU(u,h.recip)) return h.pesoTotal;
+    let kg, motivo;
+    if(u>=100 && okU(u/1000,h.recip)){ kg=h.pesoTotal/1000; motivo='Cargado en gramos → ÷1000'; }
+    else { kg=h.cant*EV.wUnit(h.cod,h.recip); motivo= u>RANGO[h.recip||'BACHA'][1]?'Peso demasiado alto → estimado':'Peso demasiado bajo → estimado'; }
+    EV.fix.push({ts:h.ts,loc:h.loc,tipo:h.tipo,cod:h.cod,recip:h.recip,cant:h.cant,orig:h.pesoTotal,kg,motivo,usr:h.usuario||'—'});
+    return kg;
+  };
+  const mk = (h,loc)=>({ts:h.ts,loc,cod:h.cod,kg:kgOf(h),u:h.cant,b:h.recip==='BACHA'?h.cant:0,v:h.recip==='BALDE'?h.cant:0});
   const usados = new Set();
   H.forEach(h=>{
     if(h.loc==='fabrica' && h.tipo==='INGRESO') EV.prod.push(mk(h,'fabrica'));
@@ -487,6 +505,9 @@ function render(){
 }
 
 function rResumen(R){
+  const fx=fixList().filter(f=>f.ts>=R.a&&f.ts<=R.b);
+  $('fixBanner').style.display=fx.length?'block':'none';
+  $('fixBanner').innerHTML=`⚠️ ${fx.length} movimiento${fx.length>1?'s':''} con peso fuera de rango en este período, ya corregido${fx.length>1?'s':''} en los números. <a href="#" onclick="document.querySelector('#tabs [data-v=config]').click();return false">Ver detalle</a>`;
   const cur=consIn(R.a,R.b), prev=consIn(R.pa,R.pb);
   const tot=cur.reduce((s,e)=>s+val(e),0), totP=prev.reduce((s,e)=>s+val(e),0);
   const rk=rankBy(cur), rkP=rankBy(prev), pm={}; rkP.forEach(r=>pm[r.cod]=val(r));
@@ -635,7 +656,12 @@ function rFab(R){
     {t:'Prod − Desp',k:'bal',f:r=>fmtV(r.bal)},{t:'Consumido',k:'cn',f:r=>fmtV(r.cn)}],rows,{key:'fab'});
 }
 
+function fixList(){const seen=new Set();return (EV.fix||[]).filter(f=>{const k=f.ts+'|'+f.loc+'|'+f.cod;if(seen.has(k))return false;seen.add(k);return true;}).sort((a,b)=>b.ts-a.ts);}
 function rConfig(){
+  table('fixTbl',[{t:'Fecha',l:1,sv:r=>r.ts,f:r=>new Date(r.ts).toLocaleString('es-UY',{dateStyle:'short',timeStyle:'short'})},
+    {t:'Lugar',l:1,f:r=>NAMES[r.loc]||r.loc,csv:r=>NAMES[r.loc]||r.loc},{t:'Tipo',l:1,k:'tipo'},{t:'Sabor',l:1,sv:r=>nombre(r.cod),f:r=>esc(nombre(r.cod)),csv:r=>nombre(r.cod)},
+    {t:'Cant.',f:r=>r.cant+' '+(r.recip||'').toLowerCase(),csv:r=>r.cant+' '+r.recip},{t:'Cargado',k:'orig',f:r=>fmt(r.orig,3)+' kg'},
+    {t:'Usado',k:'kg',f:r=>fmt(r.kg,3)+' kg'},{t:'Motivo',l:1,k:'motivo'},{t:'Usuario',l:1,k:'usr'}],fixList(),{key:'fix'});
   if(!Object.keys(famDraft).length) famDraft=Object.assign({},RAW.fam);
   $('famList').textContent='Familias: '+famNames.join(' · ');
   const cods=allCods().sort((a,b)=>nombre(a).localeCompare(nombre(b)));
@@ -674,19 +700,19 @@ function makeDemo(){
       Object.keys(locW).forEach(l=>{
         const lam=pop[c]*locW[l]*sea*wk*fruta*.35; let n=0; let x=rnd(); while(x>Math.exp(-lam)&&n<12){n++;x*=rnd()+.0001;}
         n=Math.round(lam+ (rnd()-.5)*Math.sqrt(lam)*1.5); if(n<=0)return;
-        push({ts:t+15*36e5+Math.floor(rnd()*3e7),loc:l,cod:String(c),tipo:'EGRESO',recip:'BACHA',cant:n,pesoTotal:+(n*(4.6+rnd()*.6)).toFixed(2),nom:sab[c]});
+        push({ts:t+15*36e5+Math.floor(rnd()*3e7),loc:l,cod:String(c),tipo:'EGRESO',recip:'BACHA',cant:n,pesoTotal:+(n*(3.6+rnd()*.6)).toFixed(2),nom:sab[c]});
       });
     });
     if(d.getDay()>=1&&d.getDay()<=5) Object.keys(sab).forEach(c=>{
       const n=Math.round(pop[c]*sea*2.4*(.8+rnd()*.4)); if(n<=0)return; const ts=t+8*36e5+Math.floor(rnd()*1e6);
-      push({ts,loc:'fabrica',cod:String(c),tipo:'INGRESO',recip:'BACHA',cant:n,pesoTotal:+(n*5).toFixed(1),nom:sab[c]});
+      push({ts,loc:'fabrica',cod:String(c),tipo:'INGRESO',recip:'BACHA',cant:n,pesoTotal:+(n*4).toFixed(1),nom:sab[c]});
       ['puerto','gorlero','labarra','osan'].forEach((l,i)=>{const k=Math.round(n*[.32,.26,.2,.15][i]*(.8+rnd()*.4));if(!k)return;const t2=ts+36e5*(2+i)+c*10;
-        push({ts:t2,loc:'fabrica',cod:String(c),tipo:'EGRESO',recip:'BACHA',cant:k,pesoTotal:k*5,nom:sab[c]});
-        push({ts:t2+1,loc:l,cod:String(c),tipo:'INGRESO',recip:'BACHA',cant:k,pesoTotal:k*5,nom:sab[c]});});
+        push({ts:t2,loc:'fabrica',cod:String(c),tipo:'EGRESO',recip:'BACHA',cant:k,pesoTotal:k*4,nom:sab[c]});
+        push({ts:t2+1,loc:l,cod:String(c),tipo:'INGRESO',recip:'BACHA',cant:k,pesoTotal:k*4,nom:sab[c]});});
     });
     if(d.getDay()===1||d.getDay()===4) ['puerto','gorlero','labarra'].forEach(l=>{P['p'+(id++)]={ts:t+10*36e5,desde:l,items:Object.keys(sab).map(c=>({cod:String(c),nom:sab[c],pedirB:Math.round(pop[c]*locW[l]*sea*1.3*(.7+rnd()*.6)),pedirV:0}))};});
   }
-  Object.keys(sab).forEach(c=>Object.keys(S).forEach(l=>{const b=Math.round(rnd()*(c==10||c==12?14:6));S[l][c]={bachas:b,baldes:0,kg_bachas:b*5,kg_baldes:0};}));
+  Object.keys(sab).forEach(c=>Object.keys(S).forEach(l=>{const b=Math.round(rnd()*(c==10||c==12?14:6));S[l][c]={bachas:b,baldes:0,kg_bachas:b*4,kg_baldes:0};}));
   const arts={};Object.keys(sab).forEach(c=>arts[c]={nombre:sab[c]});
   return {hist:H,ped:P,stock:S,arts,fam};
 }
