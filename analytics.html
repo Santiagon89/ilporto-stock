@@ -109,6 +109,7 @@ tbody tr:hover{background:var(--surface-2)}
     <button data-v="temporadas">Temporadas</button>
     <button data-v="rotacion">Rotación</button>
     <button data-v="fabrica">Fábrica vs Pedidos</button>
+    <button data-v="checklists">Checklists</button>
     <button data-v="config">Datos y familias</button>
   </nav>
 </header>
@@ -132,7 +133,7 @@ tbody tr:hover{background:var(--surface-2)}
     <div class="f" id="wTemp" style="display:none"><label>Temporada</label><select id="fTemp"></select></div>
     <div class="f" id="wDesde" style="display:none"><label>Desde</label><input type="date" id="fDesde"></div>
     <div class="f" id="wHasta" style="display:none"><label>Hasta</label><input type="date" id="fHasta"></div>
-    <div class="f"><label>Canal</label>
+    <div class="f" data-stock="1"><label>Canal</label>
       <select id="fCanal">
         <option value="locales">Locales (3)</option>
         <option value="todos">Locales + OSAN</option>
@@ -141,7 +142,7 @@ tbody tr:hover{background:var(--surface-2)}
         <option value="labarra">La Barra</option>
         <option value="osan">OSAN</option>
       </select></div>
-    <div class="f"><label>Familia</label><select id="fFamilia"><option value="">Todas</option></select></div>
+    <div class="f" data-stock="1"><label>Familia</label><select id="fFamilia"><option value="">Todas</option></select></div>
     <div class="f" style="margin-left:auto"><label>&nbsp;</label><span class="hint" id="periodoTxt"></span></div>
   </div>
 
@@ -221,6 +222,36 @@ tbody tr:hover{background:var(--surface-2)}
     <div class="card mt"><div class="row" style="justify-content:space-between"><div><h3>Por sabor</h3><div class="sub">Pedido = lo que piden los locales en el Pre-pedido. Kg del pedido estimados con el peso promedio de cada sabor.</div></div><button class="btn" onclick="exportCSV('fab')">⬇ CSV</button></div><div class="tw" id="fabTbl"></div></div>
   </section>
 
+  <!-- CHECKLISTS -->
+  <section class="view" id="v-checklists">
+    <div class="card" id="ckLogin" style="display:none;max-width:420px">
+      <h3>Checklists de locales</h3>
+      <div class="sub">Ingresá la clave de administrador de los checklists (la de la hoja Config).</div>
+      <div class="row"><input id="ckClaveIn" type="password" autocomplete="off" placeholder="Clave de administrador" style="flex:1"><button class="btn pri" onclick="ckLogin()">Entrar</button></div>
+      <div class="hint" id="ckLoginErr" style="margin-top:8px"></div>
+    </div>
+    <div id="ckMain">
+      <div class="banner" id="ckStatus" style="display:none"></div>
+      <div class="grid g4" id="ckKpis"></div>
+      <div class="card mt">
+        <div class="row" style="justify-content:space-between">
+          <div><h3>Locales</h3><div class="sub" id="ckLocSub"></div></div>
+          <div class="row"><button class="btn" onclick="exportCSV('ckloc')">⬇ CSV</button><button class="btn pri" id="ckPdfBtn" onclick="ckPdf()">PDF para compartir</button></div>
+        </div>
+        <div class="hint" id="ckPdfMsg" style="margin-bottom:8px"></div>
+        <div class="tw" id="ckLocTbl"></div>
+      </div>
+      <div class="card mt">
+        <div class="row" style="justify-content:space-between">
+          <div><h3>Encargados</h3><div class="sub" id="ckEncSub"></div></div>
+          <button class="btn" onclick="exportCSV('ckenc')">⬇ CSV</button>
+        </div>
+        <div class="tw" id="ckEncTbl"></div>
+      </div>
+      <div class="hint mt" id="ckFoot"></div>
+    </div>
+  </section>
+
   <!-- CONFIG -->
   <section class="view" id="v-config">
     <div class="card" style="margin-bottom:14px">
@@ -252,6 +283,7 @@ const HISTORICO = {"v":1,"desc":"Alta 25/26: elaboración Fábrica y traslados a
 /* ═══════════ CONFIG ═══════════ */
 const FB = 'https://ilporto-stock-default-rtdb.firebaseio.com';
 const PIN = '1234';                      // ← cambiá tu PIN acá
+const CHECKLIST_URL = 'https://script.google.com/macros/s/AKfycbzGXKfQhSbId75AvcnDDiM96q4FA_TlJZhQKIJsAHR7PahI_PgOvx6WP_Ux17Ff5ZXM/exec'; // ← Apps Script de los checklists
 const LOCALES = ['puerto','gorlero','labarra'];
 const CANALES = ['puerto','gorlero','labarra','osan'];
 const NAMES = {fabrica:'Fábrica',puerto:'Puerto',gorlero:'Gorlero',labarra:'La Barra',osan:'OSAN'};
@@ -521,7 +553,8 @@ function render(){
   const R=getRange();
   $('periodoTxt').textContent = new Date(R.a).toLocaleDateString('es-UY')+' → '+new Date(R.b).toLocaleDateString('es-UY')+' ('+R.days+' días)';
   $('globalFilters').style.display = (VIEW==='temporadas'||VIEW==='rotacion'||VIEW==='config')?'none':'flex';
-  ({resumen:rResumen,ranking:rRanking,tendencias:rTend,temporadas:rTemp,rotacion:rRot,fabrica:rFab,config:rConfig})[VIEW](R);
+  document.querySelectorAll('#globalFilters [data-stock]').forEach(x=>x.style.display=VIEW==='checklists'?'none':'');
+  ({resumen:rResumen,ranking:rRanking,tendencias:rTend,temporadas:rTemp,rotacion:rRot,fabrica:rFab,checklists:rChecklists,config:rConfig})[VIEW](R);
 }
 
 function rResumen(R){
@@ -799,6 +832,106 @@ function makeDemo(){
   Object.keys(sab).forEach(c=>Object.keys(S).forEach(l=>{const b=Math.round(rnd()*(c==10||c==12?14:6));S[l][c]={bachas:b,baldes:0,kg_bachas:b*4,kg_baldes:0};}));
   const arts={};Object.keys(sab).forEach(c=>arts[c]={nombre:sab[c]});
   return {hist:H,ped:P,stock:S,arts,fam};
+}
+
+/* ═══════════ CHECKLISTS (datos desde el Apps Script de los checklists) ═══════════ */
+let CK = {key:null, data:null, loading:false, err:null, pdf:null};
+const ckClave = () => { try{return sessionStorage.getItem('ipa_ck')||'';}catch(e){return '';} };
+const isoLocal = t => {const d=new Date(t);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
+const ckCls = p => p>=85?'st-good':p>=60?'st-warn':'st-crit';
+const ckCol = p => p>=85?'var(--good)':p>=60?'var(--warn)':'var(--crit)';
+
+async function ckCall(accion, extra){
+  const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), 60000);
+  try{
+    const r = await fetch(CHECKLIST_URL,{method:'POST',body:JSON.stringify(Object.assign({accion,clave:ckClave()},extra||{})),signal:ctl.signal});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    if(!j.ok) throw new Error(j.error||'Error del servidor');
+    return j.data;
+  }catch(e){
+    if(e.name==='AbortError') throw new Error('El servidor no respondió a tiempo. Probá de nuevo.');
+    if(e instanceof TypeError) throw new Error('No se pudo conectar con los checklists (revisá la URL del Apps Script y que esté implementado para "Cualquier usuario").');
+    throw e;
+  } finally { clearTimeout(to); }
+}
+
+function ckRange(R){
+  let a=R.a, b=Math.min(R.b, Date.now()), note='';
+  if(b-a>365*DAY){ a=b-365*DAY; note='El período se recortó al último año.'; }
+  return {desde:isoLocal(a), hasta:isoLocal(b), note};
+}
+
+function ckLogin(){
+  const v=$('ckClaveIn').value.trim(); if(!v) return;
+  try{sessionStorage.setItem('ipa_ck',v);}catch(e){}
+  $('ckClaveIn').value=''; $('ckLoginErr').textContent=''; CK.key=null; render();
+}
+$('ckClaveIn').addEventListener('keydown',e=>{if(e.key==='Enter')ckLogin();});
+
+async function ckLoad(p){
+  CK.loading=true; CK.err=null; CK.pdf=null; render();
+  try{ CK.data = await ckCall('periodo',{desde:p.desde,hasta:p.hasta}); }
+  catch(e){
+    CK.data=null; CK.err=e.message;
+    if(/clave/i.test(e.message)){ try{sessionStorage.removeItem('ipa_ck');}catch(_){} $('ckLoginErr').textContent=e.message; }
+  }
+  CK.loading=false; render();
+}
+
+async function ckPdf(){
+  const p=ckRange(getRange()); $('ckPdfBtn').disabled=true; $('ckPdfMsg').textContent='Generando PDF…';
+  try{
+    const r=await ckCall('pdf',{desde:p.desde,hasta:p.hasta});
+    CK.pdf=r; $('ckPdfMsg').innerHTML=`✓ ${esc(r.nombre)} — <a href="${esc(r.url)}" target="_blank" rel="noopener">Abrir / descargar PDF</a>`;
+  }catch(e){ $('ckPdfMsg').textContent='No se pudo generar el PDF: '+e.message; }
+  $('ckPdfBtn').disabled=false;
+}
+
+function rChecklists(R){
+  const logged = !!ckClave();
+  $('ckLogin').style.display = logged?'none':'block';
+  $('ckMain').style.display = logged?'block':'none';
+  if(!logged) return;
+  const p=ckRange(R), key=p.desde+'|'+p.hasta+'|'+ckClave();
+  if(CK.key!==key){ CK.key=key; ckLoad(p); return; }
+  const st=$('ckStatus');
+  if(CK.loading){ st.style.display='block'; st.textContent='Cargando checklists…'; return; }
+  if(CK.err){ st.style.display='block'; st.innerHTML='⚠️ '+esc(CK.err)+' <a href="#" onclick="CK.key=null;render();return false">Reintentar</a>'; $('ckKpis').innerHTML=''; $('ckLocTbl').innerHTML=''; $('ckEncTbl').innerHTML=''; return; }
+  const d=CK.data; if(!d) return;
+  st.style.display=p.note?'block':'none'; st.textContent=p.note;
+  const L=d.locales, E=d.encargados;
+  const prom=L.length?Math.round(L.reduce((s,l)=>s+l.ponderado,0)/L.length):0;
+  const bestL=L[0], bestE=E[0];
+  const tot=E.reduce((s,e)=>s+e.n,0);
+  const kpi=(l,v,dd)=>`<div class="card kpi"><div class="lbl">${l}</div><div class="val">${v}</div><div class="d">${dd}</div></div>`;
+  $('ckKpis').innerHTML=
+    kpi('Puntaje promedio de locales',`<span class="${ckCls(prom)}">${prom}%</span>`,'apertura + cierre')+
+    kpi('Mejor local',bestL?esc(bestL.nombre):'—',bestL?`<span class="${ckCls(bestL.ponderado)}">${bestL.ponderado}%</span>`:'')+
+    kpi('Mejor encargado',bestE?esc(bestE.nombre):'—',bestE?`<span class="${ckCls(bestE.kpi)}">${bestE.kpi}%</span> · ${bestE.n} checklists`:'sin datos')+
+    kpi('Checklists con nombre',fmt(tot),new Date(R.a).toLocaleDateString('es-UY')+' → '+new Date(Math.min(R.b,Date.now())).toLocaleDateString('es-UY'));
+  const score=(v,missing)=>`<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="width:70px;height:8px;border-radius:4px;background:var(--surface-2)"><div class="bar" style="width:${Math.max(0,Math.min(100,v))}%;background:${ckCol(v)}"></div></div><b class="${ckCls(v)}" style="min-width:42px">${v}%</b></div>`;
+  const turno=t=>t.n?`${t.kpi}% <span class="hint">(${t.n})</span>`:'<span class="hint">sin envíos</span>';
+  $('ckLocSub').textContent=`${Math.round(d.pesos.apertura*100)}% apertura + ${Math.round(d.pesos.cierre*100)}% cierre · entre paréntesis, cantidad de envíos`;
+  table('ckLocTbl',[
+    {t:'#',sv:(r)=>L.indexOf(r),f:(r,i)=>L.indexOf(r)+1,csv:r=>L.indexOf(r)+1},
+    {t:'Local',l:1,k:'nombre'},
+    {t:'Apertura',sv:r=>r.apertura.n?r.apertura.kpi:-1,f:r=>turno(r.apertura),csv:r=>r.apertura.n?r.apertura.kpi+'%':''},
+    {t:'Cierre',sv:r=>r.cierre.n?r.cierre.kpi:-1,f:r=>turno(r.cierre),csv:r=>r.cierre.n?r.cierre.kpi+'%':''},
+    {t:'A tiempo',sv:r=>(r.apertura.n+r.cierre.n)?(r.apertura.aTiempo*r.apertura.n+r.cierre.aTiempo*r.cierre.n)/(r.apertura.n+r.cierre.n):-1,
+      f:r=>{const n=r.apertura.n+r.cierre.n;return n?Math.round((r.apertura.aTiempo*r.apertura.n+r.cierre.aTiempo*r.cierre.n)/n)+'%':'—';}},
+    {t:'Puntaje',sv:r=>r.ponderado,f:r=>score(r.ponderado)+(r.incompleto?'<div class="hint" style="text-align:right">falta un turno: cuenta 0</div>':''),csv:r=>r.ponderado+'%'}
+  ],L,{key:'ckloc'});
+  $('ckEncSub').textContent='Promedio general del KPI combinado (checklist + puntualidad) de todos los checklists que cargó cada uno';
+  table('ckEncTbl',[
+    {t:'#',sv:r=>E.indexOf(r),f:r=>E.indexOf(r)+1,csv:r=>E.indexOf(r)+1},
+    {t:'Encargado',l:1,k:'nombre'},
+    {t:'Checklists',k:'n'},{t:'Aperturas',k:'aperturas'},{t:'Cierres',k:'cierres'},
+    {t:'A tiempo',sv:r=>r.aTiempo,f:r=>r.aTiempo+'%'},
+    {t:'Locales',l:1,sv:r=>r.locales.join(', '),f:r=>esc(r.locales.join(', ')),csv:r=>r.locales.join(', ')},
+    {t:'Puntaje',sv:r=>r.kpi,f:r=>score(r.kpi),csv:r=>r.kpi+'%'}
+  ],E,{key:'ckenc'});
+  $('ckFoot').textContent='Si un turno no tiene envíos en el período, cuenta 0 para el local. Los días sin envío no restan. Si hay dos envíos del mismo turno el mismo día, vale el último. Las invalidaciones de fotos ya están reflejadas.';
 }
 
 /* ═══════════ INIT ═══════════ */
