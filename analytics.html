@@ -46,8 +46,8 @@ button.btn.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
 .seg button{border:0;background:var(--surface-2);color:var(--text-2);padding:6px 10px;font:inherit;cursor:pointer;min-height:34px}
 .seg button.on{background:var(--accent);color:#fff}
 .grid{display:grid;gap:14px}
-.g4{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:1fr 1fr}
-@media(max-width:860px){.g4{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}.kpi .val{font-size:20px}}
+.gfal{grid-template-columns:minmax(0,5fr) minmax(0,6fr)}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:1fr 1fr}
+@media(max-width:860px){.gfal{grid-template-columns:1fr}.g4{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr}.g2{grid-template-columns:1fr}.kpi .val{font-size:20px}}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;min-width:0}
 .card h3{margin:0 0 2px;font-size:14px}
 .card .sub{color:var(--muted);font-size:12px;margin-bottom:10px}
@@ -233,6 +233,7 @@ tbody tr:hover{background:var(--surface-2)}
     <div id="ckMain">
       <div class="banner" id="ckStatus" style="display:none"></div>
       <div class="grid g4" id="ckKpis"></div>
+      <div class="grid g3 mt" id="ckCharts"></div>
       <div class="card mt">
         <div class="row" style="justify-content:space-between">
           <div><h3>Locales</h3><div class="sub" id="ckLocSub"></div></div>
@@ -240,6 +241,16 @@ tbody tr:hover{background:var(--surface-2)}
         </div>
         <div class="hint" id="ckPdfMsg" style="margin-bottom:8px"></div>
         <div class="tw" id="ckLocTbl"></div>
+      </div>
+      <div class="card mt">
+        <div class="row" style="justify-content:space-between">
+          <div><h3>Puntos de falla</h3><div class="sub" id="ckFalSub"></div></div>
+          <div class="row"><select id="ckFalSel" title="Ver puntos de falla de…"></select><button class="btn" onclick="exportCSV('ckfal')">⬇ CSV</button></div>
+        </div>
+        <div class="grid gfal">
+          <div class="chartbox tall"><canvas id="cckFal"></canvas></div>
+          <div class="tw" id="ckFalTbl" style="max-height:440px"></div>
+        </div>
       </div>
       <div class="card mt">
         <div class="row" style="justify-content:space-between">
@@ -512,7 +523,7 @@ function mkChart(id,cfg){
     interaction:{mode:'index',intersect:false},
     plugins:{legend:{display:cfg.data.datasets.length>1,position:'top',align:'start',labels:{boxWidth:10,boxHeight:10,usePointStyle:true,pointStyle:'circle'}},
       tooltip:{backgroundColor:css('--surface'),titleColor:css('--text'),bodyColor:css('--text-2'),borderColor:css('--border'),borderWidth:1,padding:10,
-        callbacks:{label:c=>' '+c.dataset.label+': '+fmtV(c.parsed[cfg.options&&cfg.options.indexAxis==='y'?'x':'y'])}}}},cfg.options||{});
+        callbacks:{label:c=>' '+c.dataset.label+': '+(cfg.fmt||fmtV)(c.parsed[cfg.options&&cfg.options.indexAxis==='y'?'x':'y'])}}}},cfg.options||{});
   const sc=cfg.options.scales||{};
   ['x','y'].forEach(ax=>{sc[ax]=Object.assign({grid:{color:gr,drawTicks:false},border:{display:false},ticks:{padding:6}},sc[ax]||{});});
   cfg.options.scales=sc;
@@ -888,6 +899,73 @@ async function ckPdf(){
   $('ckPdfBtn').disabled=false;
 }
 
+CK.falLoc='todos';
+const ckDelta=(cur,prev)=>{ if(prev==null) return ''; const x=cur-prev; if(x===0) return '<div class="hint" style="text-align:right">= igual</div>';
+  return `<div class="hint" style="text-align:right"><span class="${x>0?'up':'down'}">${x>0?'▲ +':'▼ '}${x} pts</span> vs anterior</div>`; };
+const TL = t => t==='apertura'?'Apertura':'Cierre';
+const trunc = (s,n) => { s=String(s||''); return s.length>n? s.slice(0,n-1)+'…' : s; };
+
+function ckSerieBuckets(serie, days){
+  // Diario hasta 45 días; después, promedio semanal
+  if(days<=45) return {labels:serie.map(p=>{const d=new Date(p.f+'T00:00');return d.getDate()+'/'+(d.getMonth()+1);}), A:serie.map(p=>p.a), C:serie.map(p=>p.c)};
+  const m={}; serie.forEach(p=>{const k=weekKey(new Date(p.f+'T00:00').getTime()); const o=m[k]=m[k]||{a:[],c:[]}; if(p.a!=null)o.a.push(p.a); if(p.c!=null)o.c.push(p.c);});
+  const ks=Object.keys(m).map(Number).sort((x,y)=>x-y), avg=a=>a.length?Math.round(a.reduce((s,v)=>s+v,0)/a.length):null;
+  return {labels:ks.map(weekLbl), A:ks.map(k=>avg(m[k].a)), C:ks.map(k=>avg(m[k].c))};
+}
+
+function ckCharts(d,R){
+  const loc=[...d.locales].sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  $('ckCharts').innerHTML=loc.map(l=>{
+    const hay=l.serie&&l.serie.length;
+    return `<div class="card"><div class="row" style="justify-content:space-between"><h3>${esc(l.nombre)}</h3><b class="${ckCls(l.ponderado)}" style="font-size:18px">${l.ponderado}%</b></div>
+      <div class="sub">Apertura ${l.apertura.n?l.apertura.kpi+'%':'—'} · Cierre ${l.cierre.n?l.cierre.kpi+'%':'—'}</div>
+      ${hay?`<div class="chartbox" style="height:230px"><canvas id="ckc_${esc(l.id)}"></canvas></div>`:'<div class="empty">Sin envíos en el período</div>'}</div>`;}).join('');
+  const s1=css('--s1'), s2=css('--s2'), mu=css('--muted');
+  loc.forEach(l=>{
+    if(!(l.serie&&l.serie.length)) return;
+    const b=ckSerieBuckets(l.serie,R.days);
+    mkChart('ckc_'+l.id,{type:'line',fmt:v=>fmt(v,0)+'%',data:{labels:b.labels,datasets:[
+      {label:'Apertura',data:b.A,borderColor:s1,backgroundColor:s1,tension:.25,pointRadius:3,borderWidth:2,spanGaps:true},
+      {label:'Cierre',data:b.C,borderColor:s2,backgroundColor:s2,tension:.25,pointRadius:3,borderWidth:2,spanGaps:true},
+      {label:'Meta 85%',data:b.labels.map(()=>85),borderColor:mu,borderDash:[4,4],borderWidth:1,pointRadius:0,pointHoverRadius:0}]},
+      options:{scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%',stepSize:25}},x:{ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:8}}}}});
+  });
+}
+
+function ckFallas(d){
+  // selector: todos / local / encargado
+  const sel=$('ckFalSel'), ls=[...d.locales].sort((a,b)=>a.nombre.localeCompare(b.nombre)), es=[...d.encargados].sort((a,b)=>a.nombre.localeCompare(b.nombre));
+  const vals=['todos'].concat(ls.map(l=>'l:'+l.id),es.map(e=>'e:'+e.nombre));
+  if(!vals.includes(CK.falLoc)) CK.falLoc='todos';
+  sel.innerHTML='<option value="todos">Todos los locales</option>'+
+    '<optgroup label="Por local">'+ls.map(l=>`<option value="l:${esc(l.id)}">${esc(l.nombre)}</option>`).join('')+'</optgroup>'+
+    (es.length?'<optgroup label="Por encargado">'+es.map(e=>`<option value="e:${esc(e.nombre)}">${esc(e.nombre)}</option>`).join('')+'</optgroup>':'');
+  sel.value=CK.falLoc;
+  sel.onchange=()=>{CK.falLoc=sel.value;render();};
+  let src, nomLoc;
+  if(CK.falLoc==='todos'){ src=d.fallas; nomLoc='todos los locales'; }
+  else if(CK.falLoc[0]==='l'){ const l=ls.find(x=>'l:'+x.id===CK.falLoc)||{}; src=l.fallas||[]; nomLoc=l.nombre; }
+  else { const e=es.find(x=>'e:'+x.nombre===CK.falLoc)||{}; src=e.fallas||[]; nomLoc='encargado/a '+e.nombre; }
+  $('ckFalSub').textContent=`${nomLoc} · % de veces que cada punto de control falló sobre las veces que se evaluó`;
+  const rows=(src||[]).filter(f=>f.fallas>0);
+  const top=rows.slice(0,10);
+  if(!top.length){
+    if(charts.cckFal){charts.cckFal.destroy();delete charts.cckFal;}
+    $('ckFalTbl').innerHTML='<div class="empty">Sin fallas registradas en el período 🎉</div>'; lastTables.ckfal={cols:[],rows:[]}; return;
+  }
+  const colr=p=>p>=30?css('--crit'):p>=10?css('--warn'):css('--good');
+  mkChart('cckFal',{type:'bar',fmt:v=>fmt(v,0)+'%',data:{labels:top.map(f=>trunc(f.label,34)+' ('+(f.turno==='apertura'?'A':'C')+')'),
+    datasets:[{label:'% de falla',data:top.map(f=>f.pct),backgroundColor:top.map(f=>colr(f.pct)),borderRadius:4}]},
+    options:{indexAxis:'y',scales:{x:{min:0,max:100,ticks:{callback:v=>v+'%'}},y:{ticks:{autoSkip:false}}}}});
+  table('ckFalTbl',[
+    {t:'Punto de control',l:1,sv:r=>r.label,f:r=>`<span style="white-space:normal;display:inline-block;min-width:160px;max-width:260px">${esc(r.label)}</span>`,csv:r=>r.label},
+    {t:'Turno',l:1,sv:r=>r.turno,f:r=>TL(r.turno),csv:r=>TL(r.turno)},
+    {t:'Fallas',sv:r=>r.fallas,f:r=>r.fallas+' <span class="hint">de '+r.total+'</span>',csv:r=>r.fallas+' de '+r.total},
+    {t:'% falla',sv:r=>r.pct,f:r=>`<b style="color:${colr(r.pct)}">${r.pct}%</b>`,csv:r=>r.pct+'%'},
+    {t:'Fotos inv.',sv:r=>r.invalidadas,f:r=>r.invalidadas?`<span class="tag">${r.invalidadas}</span>`:'—',csv:r=>r.invalidadas}
+  ],rows,{key:'ckfal'});
+}
+
 function rChecklists(R){
   const logged = !!ckClave();
   $('ckLogin').style.display = logged?'none':'block';
@@ -897,41 +975,47 @@ function rChecklists(R){
   if(CK.key!==key){ CK.key=key; ckLoad(p); return; }
   const st=$('ckStatus');
   if(CK.loading){ st.style.display='block'; st.textContent='Cargando checklists…'; return; }
-  if(CK.err){ st.style.display='block'; st.innerHTML='⚠️ '+esc(CK.err)+' <a href="#" onclick="CK.key=null;render();return false">Reintentar</a>'; $('ckKpis').innerHTML=''; $('ckLocTbl').innerHTML=''; $('ckEncTbl').innerHTML=''; return; }
+  if(CK.err){ st.style.display='block'; st.innerHTML='⚠️ '+esc(CK.err)+' <a href="#" onclick="CK.key=null;render();return false">Reintentar</a>'; ['ckKpis','ckCharts','ckLocTbl','ckEncTbl','ckFalTbl'].forEach(i=>$(i).innerHTML=''); return; }
   const d=CK.data; if(!d) return;
   st.style.display=p.note?'block':'none'; st.textContent=p.note;
-  const L=d.locales, E=d.encargados;
-  const prom=L.length?Math.round(L.reduce((s,l)=>s+l.ponderado,0)/L.length):0;
-  const bestL=L[0], bestE=E[0];
-  const tot=E.reduce((s,e)=>s+e.n,0);
+  const L=d.locales, E=d.encargados, PV=d.previo||{locales:{},encargados:{}};
+  const conDatos=L.filter(l=>l.apertura.n+l.cierre.n>0);
+  const prom=conDatos.length?Math.round(conDatos.reduce((s,l)=>s+l.ponderado,0)/conDatos.length):0;
+  const pvVals=conDatos.map(l=>PV.locales[l.id]).filter(v=>v!=null);
+  const promPrev=pvVals.length?Math.round(pvVals.reduce((s,v)=>s+v,0)/pvVals.length):null;
+  const bestL=conDatos[0], bestE=E[0], weak=(d.fallas||[]).find(f=>f.fallas>0);
   const kpi=(l,v,dd)=>`<div class="card kpi"><div class="lbl">${l}</div><div class="val">${v}</div><div class="d">${dd}</div></div>`;
+  const dl=(c,pv)=>pv==null?'':(c===pv?' · = igual':` · <span class="${c>pv?'up':'down'}">${c>pv?'▲ +':'▼ -'}${Math.abs(c-pv)} pts</span>`);
   $('ckKpis').innerHTML=
-    kpi('Puntaje promedio de locales',`<span class="${ckCls(prom)}">${prom}%</span>`,'apertura + cierre')+
-    kpi('Mejor local',bestL?esc(bestL.nombre):'—',bestL?`<span class="${ckCls(bestL.ponderado)}">${bestL.ponderado}%</span>`:'')+
-    kpi('Mejor encargado',bestE?esc(bestE.nombre):'—',bestE?`<span class="${ckCls(bestE.kpi)}">${bestE.kpi}%</span> · ${bestE.n} checklists`:'sin datos')+
-    kpi('Checklists con nombre',fmt(tot),new Date(R.a).toLocaleDateString('es-UY')+' → '+new Date(Math.min(R.b,Date.now())).toLocaleDateString('es-UY'));
-  const score=(v,missing)=>`<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="width:70px;height:8px;border-radius:4px;background:var(--surface-2)"><div class="bar" style="width:${Math.max(0,Math.min(100,v))}%;background:${ckCol(v)}"></div></div><b class="${ckCls(v)}" style="min-width:42px">${v}%</b></div>`;
+    kpi('Puntaje promedio de locales',`<span class="${ckCls(prom)}">${prom}%</span>`,'apertura + cierre'+dl(prom,promPrev)+(promPrev!=null?' vs anterior':''))+
+    kpi('Mejor local',bestL?esc(bestL.nombre):'—',bestL?`<span class="${ckCls(bestL.ponderado)}">${bestL.ponderado}%</span>`+dl(bestL.ponderado,PV.locales[bestL.id]):'sin datos')+
+    kpi('Mejor encargado',bestE?esc(bestE.nombre):'—',bestE?`<span class="${ckCls(bestE.kpi)}">${bestE.kpi}%</span> · ${bestE.n} checklists`+dl(bestE.kpi,PV.encargados[bestE.nombre]):'sin datos')+
+    kpi('Punto más débil',weak?esc(trunc(weak.label,26)):'—',weak?`<span class="down">${weak.pct}% de falla</span> · ${weak.fallas} de ${weak.total} · ${TL(weak.turno)}`:'sin fallas');
+  try{ if(typeof Chart!=='undefined') ckCharts(d,R); else $('ckCharts').innerHTML='<div class="banner">No se pudieron cargar los gráficos (revisá la conexión). Las tablas siguen disponibles.</div>'; }catch(e){ console.warn('ckCharts',e); }
+  const score=(v)=>`<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="width:70px;height:8px;border-radius:4px;background:var(--surface-2)"><div class="bar" style="width:${Math.max(0,Math.min(100,v))}%;background:${ckCol(v)}"></div></div><b class="${ckCls(v)}" style="min-width:42px">${v}%</b></div>`;
   const turno=t=>t.n?`${t.kpi}% <span class="hint">(${t.n})</span>`:'<span class="hint">sin envíos</span>';
-  $('ckLocSub').textContent=`${Math.round(d.pesos.apertura*100)}% apertura + ${Math.round(d.pesos.cierre*100)}% cierre · entre paréntesis, cantidad de envíos`;
+  $('ckLocSub').textContent=`${Math.round(d.pesos.apertura*100)}% apertura + ${Math.round(d.pesos.cierre*100)}% cierre · entre paréntesis, cantidad de envíos · variación vs el período anterior de igual largo`;
   table('ckLocTbl',[
-    {t:'#',sv:(r)=>L.indexOf(r),f:(r,i)=>L.indexOf(r)+1,csv:r=>L.indexOf(r)+1},
+    {t:'#',sv:r=>L.indexOf(r),f:r=>L.indexOf(r)+1,csv:r=>L.indexOf(r)+1},
     {t:'Local',l:1,k:'nombre'},
     {t:'Apertura',sv:r=>r.apertura.n?r.apertura.kpi:-1,f:r=>turno(r.apertura),csv:r=>r.apertura.n?r.apertura.kpi+'%':''},
     {t:'Cierre',sv:r=>r.cierre.n?r.cierre.kpi:-1,f:r=>turno(r.cierre),csv:r=>r.cierre.n?r.cierre.kpi+'%':''},
     {t:'A tiempo',sv:r=>(r.apertura.n+r.cierre.n)?(r.apertura.aTiempo*r.apertura.n+r.cierre.aTiempo*r.cierre.n)/(r.apertura.n+r.cierre.n):-1,
       f:r=>{const n=r.apertura.n+r.cierre.n;return n?Math.round((r.apertura.aTiempo*r.apertura.n+r.cierre.aTiempo*r.cierre.n)/n)+'%':'—';}},
-    {t:'Puntaje',sv:r=>r.ponderado,f:r=>score(r.ponderado)+(r.incompleto?'<div class="hint" style="text-align:right">falta un turno: cuenta 0</div>':''),csv:r=>r.ponderado+'%'}
+    {t:'Puntaje',sv:r=>r.ponderado,f:r=>score(r.ponderado)+ckDelta(r.ponderado,PV.locales[r.id])+(r.incompleto?'<div class="hint" style="text-align:right">falta un turno: cuenta 0</div>':''),csv:r=>r.ponderado+'%'}
   ],L,{key:'ckloc'});
-  $('ckEncSub').textContent='Promedio general del KPI combinado (checklist + puntualidad) de todos los checklists que cargó cada uno';
+  try{ ckFallas(d); }catch(e){ console.warn('ckFallas',e); }
+  $('ckEncSub').textContent='Promedio general del KPI combinado (checklist + puntualidad) de todos los checklists que cargó cada uno · variación vs el período anterior';
   table('ckEncTbl',[
     {t:'#',sv:r=>E.indexOf(r),f:r=>E.indexOf(r)+1,csv:r=>E.indexOf(r)+1},
     {t:'Encargado',l:1,k:'nombre'},
     {t:'Checklists',k:'n'},{t:'Aperturas',k:'aperturas'},{t:'Cierres',k:'cierres'},
     {t:'A tiempo',sv:r=>r.aTiempo,f:r=>r.aTiempo+'%'},
+    {t:'Punto más débil',l:1,sv:r=>{const f=(r.fallas||[]).find(x=>x.fallas>0);return f?f.pct:-1;},f:r=>{const f=(r.fallas||[]).find(x=>x.fallas>0);return f?`<span style="white-space:normal;display:inline-block;min-width:150px;max-width:230px">${esc(f.label)} <b class="down">${f.pct}%</b></span>`:'—';},csv:r=>{const f=(r.fallas||[]).find(x=>x.fallas>0);return f?f.label+' ('+f.pct+'%)':'';}},
     {t:'Locales',l:1,sv:r=>r.locales.join(', '),f:r=>esc(r.locales.join(', ')),csv:r=>r.locales.join(', ')},
-    {t:'Puntaje',sv:r=>r.kpi,f:r=>score(r.kpi),csv:r=>r.kpi+'%'}
+    {t:'Puntaje',sv:r=>r.kpi,f:r=>score(r.kpi)+ckDelta(r.kpi,PV.encargados[r.nombre]),csv:r=>r.kpi+'%'}
   ],E,{key:'ckenc'});
-  $('ckFoot').textContent='Si un turno no tiene envíos en el período, cuenta 0 para el local. Los días sin envío no restan. Si hay dos envíos del mismo turno el mismo día, vale el último. Las invalidaciones de fotos ya están reflejadas.';
+  $('ckFoot').textContent='Si un turno no tiene envíos en el período, cuenta 0 para el local. Los días sin envío no restan. Si hay dos envíos del mismo turno el mismo día, vale el último. Las fotos invalidadas ya cuentan como falla ("Fotos inv." = cuántas de las fallas fueron invalidadas por vos).';
 }
 
 /* ═══════════ INIT ═══════════ */
