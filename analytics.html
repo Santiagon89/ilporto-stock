@@ -46,8 +46,8 @@ button.btn.pri{background:var(--accent);color:#fff;border-color:var(--accent)}
 .seg button{border:0;background:var(--surface-2);color:var(--text-2);padding:6px 10px;font:inherit;cursor:pointer;min-height:34px}
 .seg button.on{background:var(--accent);color:#fff}
 .grid{display:grid;gap:14px}
-.gfal{grid-template-columns:minmax(0,5fr) minmax(0,6fr)}.g4{grid-template-columns:repeat(4,1fr)}.g3{grid-template-columns:repeat(3,1fr)}.g2{grid-template-columns:1fr 1fr}
-@media(max-width:860px){.gfal{grid-template-columns:1fr}.g4{grid-template-columns:1fr 1fr}.g3{grid-template-columns:1fr}.g2{grid-template-columns:1fr}.kpi .val{font-size:20px}}
+.g4{grid-template-columns:repeat(4,1fr)}.g2{grid-template-columns:1fr 1fr}
+@media(max-width:860px){.g4{grid-template-columns:1fr 1fr}.g2{grid-template-columns:1fr}.kpi .val{font-size:20px}}
 .card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;min-width:0}
 .card h3{margin:0 0 2px;font-size:14px}
 .card .sub{color:var(--muted);font-size:12px;margin-bottom:10px}
@@ -82,6 +82,32 @@ tbody tr:hover{background:var(--surface-2)}
 .view{display:none}.view.on{display:block}
 .mt{margin-top:14px}
 .banner{background:var(--surface-2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;font-size:13px;color:var(--text-2);margin-bottom:12px}
+.rep{background:#fff;color:#111;max-width:760px;margin:0 auto;padding:32px 36px;border:1px solid var(--border);border-radius:10px;
+  --text:#111;--text-2:#444;--muted:#777;--border:#e3e1dc;--surface:#fff;--surface-2:#f4f3f0;--grid:#ebe9e4;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--good:#0a8a0a;--crit:#c43333}
+.rep h1{font-size:22px;margin:0}.rep h2{font-size:15px;margin:26px 0 8px;padding-bottom:6px;border-bottom:2px solid #111}
+.rep .rhead{display:flex;justify-content:space-between;align-items:flex-end;border-bottom:3px solid #111;padding-bottom:10px;margin-bottom:16px}
+.rep .rk{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:12px 0}
+.rep .rk div{border:1px solid var(--border);border-radius:8px;padding:10px}
+.rep .rk b{display:block;font-size:19px;margin-top:2px}.rep .rk span{font-size:11px;color:#555}
+.rep ul{margin:6px 0;padding-left:18px}.rep li{margin:4px 0}
+.rep table{font-size:12px}.rep th{background:#fff;color:#555}.rep .chartbox{height:230px}
+.rep .two{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.rep .note{font-size:11px;color:#666;margin-top:6px}
+.rep .com{white-space:pre-wrap;border-left:3px solid #111;padding:6px 12px;background:#f7f6f3}
+.rep .up{color:#0a8a0a}.rep .down{color:#c43333}
+@media(max-width:700px){.rep{padding:18px}.rep .rk{grid-template-columns:1fr 1fr}.rep .two{grid-template-columns:1fr}}
+.inp-grid{display:grid;grid-template-columns:120px repeat(3,1fr);gap:6px;align-items:center}
+.inp-grid input{width:100%}
+@media print{
+  @page{size:A4;margin:12mm}
+  body{background:#fff!important}
+  header,#globalFilters,#demoBanner,.noprint{display:none!important}
+  main{padding:0;max-width:none}
+  .view{display:none!important}#v-informe{display:block!important}
+  .rep{border:0;padding:0;max-width:none}
+  .rep .sec,.rep .chartbox,.rep table,.rep .rk{break-inside:avoid}
+  .rep .rk{grid-template-columns:repeat(4,1fr)}.rep .two{grid-template-columns:1fr 1fr}
+}
 </style>
 </head>
 <body>
@@ -109,7 +135,7 @@ tbody tr:hover{background:var(--surface-2)}
     <button data-v="temporadas">Temporadas</button>
     <button data-v="rotacion">Rotación</button>
     <button data-v="fabrica">Fábrica vs Pedidos</button>
-    <button data-v="checklists">Checklists</button>
+    <button data-v="informe">Informe de cierre</button>
     <button data-v="config">Datos y familias</button>
   </nav>
 </header>
@@ -133,7 +159,7 @@ tbody tr:hover{background:var(--surface-2)}
     <div class="f" id="wTemp" style="display:none"><label>Temporada</label><select id="fTemp"></select></div>
     <div class="f" id="wDesde" style="display:none"><label>Desde</label><input type="date" id="fDesde"></div>
     <div class="f" id="wHasta" style="display:none"><label>Hasta</label><input type="date" id="fHasta"></div>
-    <div class="f" data-stock="1"><label>Canal</label>
+    <div class="f"><label>Canal</label>
       <select id="fCanal">
         <option value="locales">Locales (3)</option>
         <option value="todos">Locales + OSAN</option>
@@ -142,7 +168,7 @@ tbody tr:hover{background:var(--surface-2)}
         <option value="labarra">La Barra</option>
         <option value="osan">OSAN</option>
       </select></div>
-    <div class="f" data-stock="1"><label>Familia</label><select id="fFamilia"><option value="">Todas</option></select></div>
+    <div class="f"><label>Familia</label><select id="fFamilia"><option value="">Todas</option></select></div>
     <div class="f" style="margin-left:auto"><label>&nbsp;</label><span class="hint" id="periodoTxt"></span></div>
   </div>
 
@@ -222,45 +248,25 @@ tbody tr:hover{background:var(--surface-2)}
     <div class="card mt"><div class="row" style="justify-content:space-between"><div><h3>Por sabor</h3><div class="sub">Pedido = lo que piden los locales en el Pre-pedido. Kg del pedido estimados con el peso promedio de cada sabor.</div></div><button class="btn" onclick="exportCSV('fab')">⬇ CSV</button></div><div class="tw" id="fabTbl"></div></div>
   </section>
 
-  <!-- CHECKLISTS -->
-  <section class="view" id="v-checklists">
-    <div class="card" id="ckLogin" style="display:none;max-width:420px">
-      <h3>Checklists de locales</h3>
-      <div class="sub">Ingresá la clave de administrador de los checklists (la de la hoja Config).</div>
-      <div class="row"><input id="ckClaveIn" type="password" autocomplete="off" placeholder="Clave de administrador" style="flex:1"><button class="btn pri" onclick="ckLogin()">Entrar</button></div>
-      <div class="hint" id="ckLoginErr" style="margin-top:8px"></div>
+  <!-- INFORME DE CIERRE -->
+  <section class="view" id="v-informe">
+    <div class="filters noprint">
+      <div class="f"><label>Mes del cierre</label><select id="iMes"></select></div>
+      <button class="btn pri" onclick="descargarPDF()">⬇ Descargar PDF</button>
+      <div class="hint" style="margin-left:auto;max-width:380px">En la ventana de impresión elegí "Guardar como PDF". Los datos de ventas y nómina se cargan abajo y se guardan por mes.</div>
     </div>
-    <div id="ckMain">
-      <div class="banner" id="ckStatus" style="display:none"></div>
-      <div class="grid g4" id="ckKpis"></div>
-      <div class="grid g3 mt" id="ckCharts"></div>
-      <div class="card mt">
-        <div class="row" style="justify-content:space-between">
-          <div><h3>Locales</h3><div class="sub" id="ckLocSub"></div></div>
-          <div class="row"><button class="btn" onclick="exportCSV('ckloc')">⬇ CSV</button><button class="btn pri" id="ckPdfBtn" onclick="ckPdf()">PDF para compartir</button></div>
-        </div>
-        <div class="hint" id="ckPdfMsg" style="margin-bottom:8px"></div>
-        <div class="tw" id="ckLocTbl"></div>
+    <div class="card noprint" style="margin-bottom:14px">
+      <div class="row" style="justify-content:space-between"><div><h3>Ventas y nómina del mes</h3><div class="sub">Opcional. Valores en $ (pesos). Si los dejás vacíos, esa sección no aparece en el informe.</div></div>
+        <div class="row"><button class="btn pri" onclick="guardarCierre()">Guardar</button><span class="hint" id="iMsg"></span></div></div>
+      <div class="inp-grid">
+        <div class="hint"></div><div class="hint">Ventas $</div><div class="hint">Tickets</div><div class="hint">Nómina $ (costo total)</div>
+        <div>Puerto</div><input data-l="puerto" data-k="ventas" inputmode="decimal"><input data-l="puerto" data-k="tickets" inputmode="numeric"><input data-l="puerto" data-k="personal" inputmode="decimal">
+        <div>Gorlero</div><input data-l="gorlero" data-k="ventas" inputmode="decimal"><input data-l="gorlero" data-k="tickets" inputmode="numeric"><input data-l="gorlero" data-k="personal" inputmode="decimal">
+        <div>La Barra</div><input data-l="labarra" data-k="ventas" inputmode="decimal"><input data-l="labarra" data-k="tickets" inputmode="numeric"><input data-l="labarra" data-k="personal" inputmode="decimal">
       </div>
-      <div class="card mt">
-        <div class="row" style="justify-content:space-between">
-          <div><h3>Puntos de falla</h3><div class="sub" id="ckFalSub"></div></div>
-          <div class="row"><select id="ckFalSel" title="Ver puntos de falla de…"></select><button class="btn" onclick="exportCSV('ckfal')">⬇ CSV</button></div>
-        </div>
-        <div class="grid gfal">
-          <div class="chartbox tall"><canvas id="cckFal"></canvas></div>
-          <div class="tw" id="ckFalTbl" style="max-height:440px"></div>
-        </div>
-      </div>
-      <div class="card mt">
-        <div class="row" style="justify-content:space-between">
-          <div><h3>Encargados</h3><div class="sub" id="ckEncSub"></div></div>
-          <button class="btn" onclick="exportCSV('ckenc')">⬇ CSV</button>
-        </div>
-        <div class="tw" id="ckEncTbl"></div>
-      </div>
-      <div class="hint mt" id="ckFoot"></div>
+      <div class="f mt"><label>Comentarios para los directores</label><textarea id="iCom" rows="3" style="font:inherit;color:var(--text);background:var(--surface-2);border:1px solid var(--border);border-radius:7px;padding:8px;width:100%" placeholder="Ej: lluvias la 2ª semana, se lanzó Chocolate Dubai, faltó personal en La Barra…"></textarea></div>
     </div>
+    <div class="rep" id="rep"></div>
   </section>
 
   <!-- CONFIG -->
@@ -294,7 +300,6 @@ const HISTORICO = {"v":1,"desc":"Alta 25/26: elaboración Fábrica y traslados a
 /* ═══════════ CONFIG ═══════════ */
 const FB = 'https://ilporto-stock-default-rtdb.firebaseio.com';
 const PIN = '1234';                      // ← cambiá tu PIN acá
-const CHECKLIST_URL = 'https://script.google.com/macros/s/AKfycbzGXKfQhSbId75AvcnDDiM96q4FA_TlJZhQKIJsAHR7PahI_PgOvx6WP_Ux17Ff5ZXM/exec'; // ← Apps Script de los checklists
 const LOCALES = ['puerto','gorlero','labarra'];
 const CANALES = ['puerto','gorlero','labarra','osan'];
 const NAMES = {fabrica:'Fábrica',puerto:'Puerto',gorlero:'Gorlero',labarra:'La Barra',osan:'OSAN'};
@@ -302,7 +307,7 @@ const DAY = 864e5;
 const DEFAULT_FAMS = ['Cremas','Chocolates','Dulce de leche','Frutales','Al agua / Sorbetes','Especiales','Sin azúcar'];
 
 /* ═══════════ STATE ═══════════ */
-let RAW = {hist:{},ped:{},stock:{},arts:{},fam:{}};
+let RAW = {hist:{},ped:{},stock:{},arts:{},fam:{},cier:{}};
 let EV = {cons:[],prod:[],desp:[],ped:[],otros:[]};   // eventos normalizados
 let RITMO = 'hoy', UNIT = 'kg', VIEW = 'resumen', GRAN = 'sem', NORM = 'dia';
 let trendSel = [];
@@ -373,12 +378,12 @@ async function loadAll(){
   DEMO = new URLSearchParams(location.search).has('demo');
   try{
     if(DEMO) throw new Error('demo');
-    const [hist,ped,stock,arts,fam] = await Promise.all([
-      fbGet('historial'), fbGet('pedidos'), fbGet('stock'), fbGet('articulos'), fbGet('analytics/familias')
+    const [hist,ped,stock,arts,fam,cier] = await Promise.all([
+      fbGet('historial'), fbGet('pedidos'), fbGet('stock'), fbGet('articulos'), fbGet('analytics/familias'), fbGet('analytics/cierres')
     ]);
     RAW.hist  = await archive('historial', hist||{});
     RAW.ped   = await archive('pedidos', ped||{});
-    RAW.stock = stock||{}; RAW.arts = arts||{}; RAW.fam = fam||{};
+    RAW.stock = stock||{}; RAW.arts = arts||{}; RAW.fam = fam||{}; RAW.cier = cier||{};
   }catch(e){
     console.warn('Usando datos demo:', e.message);
     DEMO = true; Object.assign(RAW, makeDemo());
@@ -466,6 +471,10 @@ function buildSelectors(){
   const ms = new Set(); for(let t=sod(EV.minTs); t<=Date.now(); t+=DAY*27) ms.add(monthKey(t)); ms.add(monthKey(Date.now()));
   const mArr=[...ms].sort().reverse();
   $('fMes').innerHTML = mArr.map(k=>`<option value="${k}">${monthLbl(k)}</option>`).join('');
+  const iSel=$('iMes').value; const MESL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+  $('iMes').innerHTML = mArr.map(k=>{const [y,m]=k.split('-');return `<option value="${k}">${MESL[+m-1]} ${y}</option>`;}).join('');
+  const prevM=monthKey(new Date(new Date().getFullYear(),new Date().getMonth()-1,15).getTime());
+  $('iMes').value = iSel && mArr.includes(iSel) ? iSel : (mArr.includes(prevM)?prevM:mArr[0]);
   // temporadas
   // Temporadas: desde la alta anterior al inicio de datos hasta la próxima alta (aunque no tengan registros)
   const ss = new Set(); const sIni=Math.min(EV.minTs, Date.now()-300*DAY), sFin=seasonRange(seasonOf(Date.now()))[1]+DAY;
@@ -523,7 +532,7 @@ function mkChart(id,cfg){
     interaction:{mode:'index',intersect:false},
     plugins:{legend:{display:cfg.data.datasets.length>1,position:'top',align:'start',labels:{boxWidth:10,boxHeight:10,usePointStyle:true,pointStyle:'circle'}},
       tooltip:{backgroundColor:css('--surface'),titleColor:css('--text'),bodyColor:css('--text-2'),borderColor:css('--border'),borderWidth:1,padding:10,
-        callbacks:{label:c=>' '+c.dataset.label+': '+(cfg.fmt||fmtV)(c.parsed[cfg.options&&cfg.options.indexAxis==='y'?'x':'y'])}}}},cfg.options||{});
+        callbacks:{label:c=>' '+c.dataset.label+': '+fmtV(c.parsed[cfg.options&&cfg.options.indexAxis==='y'?'x':'y'])}}}},cfg.options||{});
   const sc=cfg.options.scales||{};
   ['x','y'].forEach(ax=>{sc[ax]=Object.assign({grid:{color:gr,drawTicks:false},border:{display:false},ticks:{padding:6}},sc[ax]||{});});
   cfg.options.scales=sc;
@@ -563,9 +572,8 @@ function render(){
   if(!EV.cons) return;
   const R=getRange();
   $('periodoTxt').textContent = new Date(R.a).toLocaleDateString('es-UY')+' → '+new Date(R.b).toLocaleDateString('es-UY')+' ('+R.days+' días)';
-  $('globalFilters').style.display = (VIEW==='temporadas'||VIEW==='rotacion'||VIEW==='config')?'none':'flex';
-  document.querySelectorAll('#globalFilters [data-stock]').forEach(x=>x.style.display=VIEW==='checklists'?'none':'');
-  ({resumen:rResumen,ranking:rRanking,tendencias:rTend,temporadas:rTemp,rotacion:rRot,fabrica:rFab,checklists:rChecklists,config:rConfig})[VIEW](R);
+  $('globalFilters').style.display = (VIEW==='temporadas'||VIEW==='rotacion'||VIEW==='config'||VIEW==='informe')?'none':'flex';
+  ({resumen:rResumen,ranking:rRanking,tendencias:rTend,temporadas:rTemp,rotacion:rRot,fabrica:rFab,informe:rInforme,config:rConfig})[VIEW](R);
 }
 
 function rResumen(R){
@@ -756,6 +764,135 @@ function rRot(){
     {t:'Días sin salida',sv:r=>r.sin??9999,f:r=>r.sin==null?'—':r.sin}],rows,{key:'rot'});
 }
 
+/* ═══════════ INFORME DE CIERRE ═══════════ */
+const MESL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
+const money=n=>(n==null||isNaN(n))?'—':'$ '+fmt(n,0);
+let iMesCargado=null;
+function mRange(k){const [y,m]=k.split('-').map(Number);return [new Date(y,m-1,1).getTime(),new Date(y,m,1).getTime()-1];}
+function cierreDe(k){return (RAW.cier||{})[k]||{locales:{},comentario:''};}
+function cargarForm(k){
+  const c=cierreDe(k);
+  document.querySelectorAll('.inp-grid input').forEach(inp=>{const v=((c.locales||{})[inp.dataset.l]||{})[inp.dataset.k];inp.value=v!=null&&v!==''?v:'';});
+  $('iCom').value=c.comentario||''; iMesCargado=k; $('iMsg').textContent='';
+}
+function leerForm(){
+  const loc={}; document.querySelectorAll('.inp-grid input').forEach(inp=>{const raw=inp.value.trim().replace(/\./g,'').replace(',','.');const v=raw===''?null:parseFloat(raw);
+    if(v!=null&&!isNaN(v)){(loc[inp.dataset.l]=loc[inp.dataset.l]||{})[inp.dataset.k]=v;}});
+  return {locales:loc,comentario:$('iCom').value.trim()};
+}
+function sinGuardar(){const k=$('iMes').value;return JSON.stringify(leerForm())!==JSON.stringify(Object.assign({locales:{},comentario:''},cierreDe(k)));}
+async function guardarCierre(){
+  const k=$('iMes').value, d=leerForm(); RAW.cier=RAW.cier||{}; RAW.cier[k]=d;
+  if(DEMO){$('iMsg').textContent='Guardado (demo, no se escribe en Firebase)';render();return;}
+  try{await fbPut('analytics/cierres/'+k,d);$('iMsg').textContent='✓ Guardado';}catch(e){$('iMsg').textContent='Error: '+e.message;}
+  render();
+}
+function descargarPDF(){
+  const root=document.documentElement, prev=root.getAttribute('data-theme');
+  root.setAttribute('data-theme','light'); render();
+  const restore=()=>{if(prev)root.setAttribute('data-theme',prev);else root.removeAttribute('data-theme');window.removeEventListener('afterprint',restore);render();};
+  window.addEventListener('afterprint',restore);
+  setTimeout(()=>window.print(),300);
+}
+function rInforme(){
+  const k=$('iMes').value; if(!k) return;
+  if(iMesCargado!==k) cargarForm(k);
+  const C=Object.assign({locales:{},comentario:''},leerForm());  // vista previa en vivo de lo que está en el formulario
+  const [a,b]=mRange(k), [y,m]=k.split('-').map(Number);
+  const pk=monthKey(new Date(y,m-2,15).getTime()), [pa,pb]=mRange(pk);
+  const yk=(y-1)+'-'+String(m).padStart(2,'0'), [ya,yb]=mRange(yk);
+  const diasMes=Math.round((b+1-a)/DAY), hoy=Date.now(), diasData=Math.max(1,Math.min(diasMes,Math.ceil((Math.min(b,hoy)-a)/DAY)));
+  const consR=(x,y2,l)=>EV.cons.filter(e=>e.ts>=x&&e.ts<=y2&&e.loc===l&&!e.pl).reduce((s,e)=>s+e.kg,0);
+  const consY=(l)=>EV.cons.filter(e=>e.ts>=ya&&e.ts<=yb&&e.loc===l).reduce((s,e)=>s+e.kg,0); // incluye planillas
+  const LL=LOCALES;
+  const loc=LL.map(l=>({l,kg:consR(a,b,l),prev:consR(pa,pb,l),yago:consY(l),...(C.locales[l]||{})}));
+  const tot=loc.reduce((s,r)=>s+r.kg,0), totP=loc.reduce((s,r)=>s+r.prev,0), totY=loc.reduce((s,r)=>s+r.yago,0);
+  const osan=EV.cons.filter(e=>e.loc==='osan'&&e.ts>=a&&e.ts<=b).reduce((s,e)=>s+e.kg,0);
+  const prod=EV.prod.filter(e=>e.ts>=a&&e.ts<=b).reduce((s,e)=>s+e.kg,0), prodP=EV.prod.filter(e=>e.ts>=pa&&e.ts<=pb).reduce((s,e)=>s+e.kg,0);
+  const desp=EV.desp.filter(e=>e.ts>=a&&e.ts<=b), despT=desp.reduce((s,e)=>s+e.kg,0);
+  const despBy={}; desp.forEach(e=>despBy[e.loc]=(despBy[e.loc]||0)+e.kg);
+  const ped=EV.ped.filter(e=>e.ts>=a&&e.ts<=b), pedT=ped.reduce((s,e)=>s+e.kg,0);
+  const despLoc=desp.filter(e=>LL.includes(e.loc)).reduce((s,e)=>s+e.kg,0);
+  // sabores
+  const cM=EV.cons.filter(e=>e.ts>=a&&e.ts<=b&&LL.includes(e.loc)&&!e.pl), cP=EV.cons.filter(e=>e.ts>=pa&&e.ts<=pb&&LL.includes(e.loc)&&!e.pl);
+  const by=arr=>{const o={};arr.forEach(e=>o[e.cod]=(o[e.cod]||0)+e.kg);return o;};
+  const sM=by(cM), sP=by(cP);
+  const rank=Object.keys(sM).map(c=>({cod:c,nom:nombre(c),kg:sM[c],prev:sP[c]||0,share:tot?sM[c]/tot*100:0,p:pct(sM[c],sP[c]||0)})).sort((x,y2)=>y2.kg-x.kg);
+  const movers=[...new Set([...Object.keys(sM),...Object.keys(sP)])].map(c=>({cod:c,nom:nombre(c),a:sM[c]||0,b:sP[c]||0,d:(sM[c]||0)-(sP[c]||0)})).filter(x=>x.a+x.b>3);
+  const suben=movers.filter(x=>x.d>0).sort((x,y2)=>y2.d-x.d).slice(0,5), bajan=movers.filter(x=>x.d<0).sort((x,y2)=>x.d-y2.d).slice(0,5);
+  const conStock=new Set(); LL.forEach(l=>Object.entries((RAW.stock||{})[l]||{}).forEach(([c,v])=>{if((+v.kg_bachas||0)+(+v.kg_baldes||0)>0)conStock.add(c);}));
+  const quietos=[...conStock].filter(c=>!sM[c]).map(nombre).sort();
+  const fixN=fixList().filter(f=>f.ts>=a&&f.ts<=b).length;
+  // $
+  const hayV=loc.some(r=>r.ventas), V=loc.reduce((s,r)=>s+(r.ventas||0),0), TK=loc.reduce((s,r)=>s+(r.tickets||0),0);
+  const PE=loc.reduce((s,r)=>s+(r.personal||0),0), hayP=loc.some(r=>r.personal);
+  const pctTxt=(x,y2)=>{const p=pct(x,y2);return y2>0&&isFinite(p)?`<span class="${p>=0?'up':'down'}">${p>=0?'▲':'▼'} ${fmt(Math.abs(p),0)}%</span>`:'—';};
+  const pctPlain=(x,y2)=>{const p=pct(x,y2);return y2>0&&isFinite(p)?`${p>=0?'+':'−'}${fmt(Math.abs(p),0)}%`:null;};
+  const mesTxt=MESL[m-1]+' '+y, pTxt=MESL[(m+10)%12];
+  const parcial=b>hoy;
+  // Resumen ejecutivo
+  const best=[...loc].filter(r=>r.prev>0).sort((x,y2)=>pct(y2.kg,y2.prev)-pct(x.kg,x.prev))[0];
+  const bl=[];
+  bl.push(`Consumo en locales: <b>${fmt(tot,0)} kg</b> (${fmt(tot/diasData,0)} kg/día)`+(pctPlain(tot,totP)?`, <b>${pctPlain(tot,totP)}</b> vs ${pTxt}`:'')+(totY>0?` y <b>${pctPlain(tot,totY)}</b> vs ${MESL[m-1]} ${y-1}`:'')+'.');
+  if(tot>0) bl.push(`Puerto concentra el <b>${fmt(loc[0].kg/tot*100,0)}%</b> del consumo; Gorlero ${fmt(loc[1].kg/tot*100,0)}% y La Barra ${fmt(loc[2].kg/tot*100,0)}%.`+(best?` Mayor crecimiento: <b>${NAMES[best.l]}</b> (${pctPlain(best.kg,best.prev)}).`:''));
+  if(rank.length) bl.push(`Sabor más vendido: <b>${esc(rank[0].nom)}</b> (${fmt(rank[0].kg,0)} kg, ${fmt(rank[0].share,0)}%). El top 3 suma el ${fmt(rank.slice(0,3).reduce((s,r)=>s+r.share,0),0)}% del consumo.`);
+  bl.push(`Fábrica produjo <b>${fmt(prod,0)} kg</b>`+(pctPlain(prod,prodP)?` (${pctPlain(prod,prodP)} vs ${pTxt})`:'')+` y despachó <b>${fmt(despT,0)} kg</b>`+(despBy.osan?`, de los cuales ${fmt(despBy.osan,0)} kg a OSAN`:'')+'.');
+  if(hayV) bl.push(`Ventas: <b>${money(V)}</b>`+(TK?` en ${fmt(TK,0)} tickets (ticket promedio ${money(V/TK)})`:'')+(tot?` · ${money(V/tot)} por kg`:'')+'.');
+  if(hayP&&hayV){const peor=[...loc].filter(r=>r.personal&&r.ventas).sort((x,y2)=>y2.personal/y2.ventas-x.personal/x.ventas)[0];
+    bl.push(`Nómina: <b>${money(PE)}</b> = <b>${fmt(PE/V*100,1)}%</b> de las ventas`+(tot?` (${money(PE/tot)} por kg vendido)`:'')+(peor?`. Mayor peso en <b>${NAMES[peor.l]}</b> (${fmt(peor.personal/peor.ventas*100,1)}%)`:'')+'.');}
+  else if(hayP) bl.push(`Nómina: <b>${money(PE)}</b>`+(tot?` (${money(PE/tot)} por kg vendido)`:'')+'.');
+  const kpis=[['Consumo locales',fmt(tot,0)+' kg',pctTxt(tot,totP)+' vs '+pTxt],['Producción Fábrica',fmt(prod,0)+' kg',pctTxt(prod,prodP)+' vs '+pTxt],
+    hayV?['Ventas',money(V),TK?'ticket prom. '+money(V/TK):'']:['Despachado',fmt(despT,0)+' kg',despBy.osan?'OSAN '+fmt(despBy.osan,0)+' kg':''],
+    hayP&&hayV?['Nómina / ventas',fmt(PE/V*100,1)+'%','nómina '+money(PE)]:['Sabor #1',rank[0]?esc(rank[0].nom):'—',rank[0]?fmt(rank[0].share,0)+'% del consumo':'']];
+  // tabla locales
+  const thL=`<tr><th class="l">Local</th><th>Kg mes</th><th>Kg/día</th><th>vs ${pTxt}</th>${totY>0?`<th>vs ${MESL[m-1].slice(0,3)} ${String(y-1).slice(2)}</th>`:''}<th>% total</th>${hayV?'<th>Ventas</th><th>Ticket prom.</th><th>$/kg</th>':''}${hayP?'<th>Nómina</th>'+(hayV?'<th>Nómina / ventas</th>':'')+'<th>Nómina / kg</th>':''}</tr>`;
+  const trL=r=>`<tr><td class="l">${NAMES[r.l]}</td><td>${fmt(r.kg,0)}</td><td>${fmt(r.kg/diasData,1)}</td><td>${pctTxt(r.kg,r.prev)}</td>${totY>0?`<td>${r.yago?pctTxt(r.kg,r.yago):'—'}</td>`:''}<td>${tot?fmt(r.kg/tot*100,0)+'%':'—'}</td>${hayV?`<td>${money(r.ventas)}</td><td>${r.tickets&&r.ventas?money(r.ventas/r.tickets):'—'}</td><td>${r.ventas&&r.kg?money(r.ventas/r.kg):'—'}</td>`:''}${hayP?`<td>${money(r.personal)}</td>`+(hayV?`<td>${r.personal&&r.ventas?'<b>'+fmt(r.personal/r.ventas*100,1)+'%</b>':'—'}</td>`:'')+`<td>${r.personal&&r.kg?money(r.personal/r.kg):'—'}</td>`:''}</tr>`;
+  const totRow={l:'_',kg:tot,prev:totP,yago:totY,ventas:hayV?V:null,tickets:TK,personal:PE||null}; NAMES._='<b>Total</b>';
+  const destTxt=['puerto','gorlero','labarra','osan'].filter(d=>despBy[d]).map(d=>`${NAMES[d]} ${fmt(despBy[d],0)} kg`).join(' · ');
+  $('rep').innerHTML=`
+    <div class="rhead"><div><div style="font-size:12px;color:#666;letter-spacing:.08em">IL PORTO · HELADERÍAS</div><h1>Informe de cierre · ${mesTxt.charAt(0).toUpperCase()+mesTxt.slice(1)}</h1></div>
+      <div style="text-align:right;font-size:12px;color:#555">Preparado por Santiago · Operaciones<br>${new Date().toLocaleDateString('es-UY',{day:'numeric',month:'long',year:'numeric'})}</div></div>
+    ${parcial?`<div class="note" style="margin-bottom:8px">⚠ Mes en curso: datos hasta el ${new Date(hoy).toLocaleDateString('es-UY')} (${diasData} de ${diasMes} días).</div>`:''}
+    <div class="rk">${kpis.map(x=>`<div><span>${x[0]}</span><b>${x[1]}</b><span>${x[2]}</span></div>`).join('')}</div>
+    <div class="sec"><h2>Resumen ejecutivo</h2><ul>${bl.map(x=>`<li>${x}</li>`).join('')}</ul>
+    </div><div class="sec"><h2>1. Consumo por local</h2>
+    <div class="two"><div class="chartbox"><canvas id="rcLoc"></canvas></div><div class="chartbox"><canvas id="rcDia"></canvas></div></div>
+    <table class="mt"><thead>${thL}</thead><tbody>${loc.map(trL).join('')}${trL(totRow)}</tbody></table>
+    <div class="note">Consumo = egresos registrados en la app de stock (kg).${totY>0?' Año anterior: traslados a Puerto según planillas.':''}${fixN?` Se corrigieron ${fixN} movimientos con peso fuera de rango.`:''}</div>
+    </div><div class="sec"><h2>2. Sabores</h2>
+    <div class="two"><div class="chartbox" style="height:280px"><canvas id="rcTop"></canvas></div>
+      <div><table><thead><tr><th class="l">📈 Suben</th><th>Kg</th><th>Var.</th></tr></thead><tbody>${suben.map(x=>`<tr><td class="l">${esc(x.nom)}</td><td>${fmt(x.a,0)}</td><td class="up">+${fmt(x.d,0)} kg</td></tr>`).join('')||'<tr><td class="l" colspan="3">—</td></tr>'}</tbody></table>
+      <table class="mt"><thead><tr><th class="l">📉 Bajan</th><th>Kg</th><th>Var.</th></tr></thead><tbody>${bajan.map(x=>`<tr><td class="l">${esc(x.nom)}</td><td>${fmt(x.a,0)}</td><td class="down">−${fmt(-x.d,0)} kg</td></tr>`).join('')||'<tr><td class="l" colspan="3">—</td></tr>'}</tbody></table></div></div>
+    ${quietos.length?`<div class="note"><b>Sin movimiento en el mes (con stock en locales):</b> ${quietos.map(esc).join(', ')}.</div>`:''}
+    </div><div class="sec"><h2>3. Fábrica</h2>
+    <div class="two"><div class="chartbox"><canvas id="rcFab"></canvas></div>
+      <div><table><tbody>
+        <tr><td class="l">Producido</td><td><b>${fmt(prod,0)} kg</b></td><td>${pctTxt(prod,prodP)}</td></tr>
+        <tr><td class="l">Despachado total</td><td><b>${fmt(despT,0)} kg</b></td><td>${prod?fmt(despT/prod*100,0)+'% de lo producido':''}</td></tr>
+        <tr><td class="l">Pedido por locales</td><td>${pedT?fmt(pedT,0)+' kg':'—'}</td><td>${pedT?'cumplimiento '+fmt(despLoc/pedT*100,0)+'%':''}</td></tr>
+        <tr><td class="l">Despachos a OSAN</td><td>${fmt(despBy.osan||0,0)} kg</td><td>${despT?fmt((despBy.osan||0)/despT*100,0)+'% del total':''}</td></tr>
+      </tbody></table><div class="note">${destTxt?'Destinos: '+destTxt+'.':''} Kg de pedidos estimados con el peso promedio de cada sabor.</div></div></div>
+    </div>${C.comentario?`<div class="sec"><h2>Comentarios</h2><div class="com">${esc(C.comentario)}</div></div>`:''}
+    <div class="note" style="margin-top:24px;border-top:1px solid #ddd;padding-top:8px">Fuente: app de control de stock Il Porto (Firebase) · Il Porto Analytics.</div>`;
+  // gráficos (colores fijos claros para el informe)
+  const RS={s1:'#2a78d6',s2:'#eb6834',s3:'#1baf7a',s4:'#eda100'};
+  const base=(o)=>Object.assign({responsive:true,maintainAspectRatio:false,animation:false,locale:'es-UY',plugins:{legend:{labels:{color:'#444',boxWidth:10,boxHeight:10,usePointStyle:true}},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.parsed[o&&o.indexAxis==='y'?'x':'y'],0)+' kg'}}},
+    scales:{x:{grid:{color:'#eee'},ticks:{color:'#555'},border:{display:false}},y:{grid:{color:'#eee'},ticks:{color:'#555'},border:{display:false},beginAtZero:true}}},o||{});
+  const mk=(id,cfg)=>{if(charts[id])charts[id].destroy();charts[id]=new Chart($(id),cfg);};
+  mk('rcLoc',{type:'bar',data:{labels:LL.map(l=>NAMES[l]),datasets:[{label:pTxt,data:loc.map(r=>r.prev),backgroundColor:'#b9b7b0',borderRadius:4},{label:MESL[m-1],data:loc.map(r=>r.kg),backgroundColor:RS.s1,borderRadius:4}]},
+    options:base({plugins:{legend:{labels:{color:'#444',boxWidth:10,boxHeight:10,usePointStyle:true}},title:{display:true,text:'Kg por local',color:'#111',align:'start'},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.parsed.y,0)+' kg'}}}})});
+  const days=[]; for(let t=a;t<=Math.min(b,hoy);t+=DAY) days.push(sod(t));
+  const dser=l=>{const o={};EV.cons.filter(e=>e.loc===l&&!e.pl&&e.ts>=a&&e.ts<=b).forEach(e=>{const kk=sod(e.ts);o[kk]=(o[kk]||0)+e.kg;});return days.map(d=>o[d]||0);};
+  mk('rcDia',{type:'line',data:{labels:days.map(d=>new Date(d).getDate()),datasets:LL.map((l,i)=>({label:NAMES[l],data:dser(l),borderColor:[RS.s1,RS.s2,RS.s3][i],backgroundColor:[RS.s1,RS.s2,RS.s3][i],borderWidth:2,pointRadius:0,tension:.25}))},
+    options:base({plugins:{legend:{labels:{color:'#444',boxWidth:10,boxHeight:10,usePointStyle:true}},title:{display:true,text:'Kg por día',color:'#111',align:'start'},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.parsed.y,0)+' kg'}}}})});
+  const t10=rank.slice(0,10);
+  mk('rcTop',{type:'bar',data:{labels:t10.map(r=>r.nom),datasets:[{label:'Kg',data:t10.map(r=>r.kg),backgroundColor:RS.s1,borderRadius:4}]},
+    options:base({indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 sabores (kg)',color:'#111',align:'start'},tooltip:{callbacks:{label:c=>' '+fmt(c.parsed.x,0)+' kg'}}},scales:{x:{grid:{color:'#eee'},ticks:{color:'#555'},beginAtZero:true},y:{grid:{display:false},ticks:{color:'#333'}}}})});
+  const wk=buckets(a,Math.min(b,hoy),'sem'); const ws=arr=>{const o={};arr.forEach(e=>{const kk=weekKey(e.ts);o[kk]=(o[kk]||0)+e.kg;});return wk.map(w=>o[w]||0);};
+  mk('rcFab',{type:'bar',data:{labels:wk.map(weekLbl),datasets:[{label:'Producido',data:ws(EV.prod.filter(e=>e.ts>=a&&e.ts<=b)),backgroundColor:RS.s1,borderRadius:4},{label:'Despachado',data:ws(desp),backgroundColor:RS.s3,borderRadius:4}]},
+    options:base({plugins:{legend:{labels:{color:'#444',boxWidth:10,boxHeight:10,usePointStyle:true}},title:{display:true,text:'Fábrica por semana (kg)',color:'#111',align:'start'},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.parsed.y,0)+' kg'}}},scales:{x:{grid:{display:false},ticks:{color:'#555'}},y:{grid:{color:'#eee'},ticks:{color:'#555'},beginAtZero:true}}})});
+}
+
 function rFab(R){
   const inR=e=>e.ts>=R.a&&e.ts<=R.b&&famOk(e.cod);
   const destOk=e=>canalOk(e.loc);
@@ -807,8 +944,9 @@ async function saveFamilias(){
 $('tabs').onclick=e=>{const b=e.target.closest('button');if(!b)return;VIEW=b.dataset.v;document.querySelectorAll('#tabs button').forEach(x=>x.classList.toggle('on',x===b));document.querySelectorAll('.view').forEach(v=>v.classList.toggle('on',v.id==='v-'+VIEW));render();};
 const segBind=(id,attr,set)=>{$(id).onclick=e=>{const b=e.target.closest('button');if(!b)return;$(id).querySelectorAll('button').forEach(x=>x.classList.toggle('on',x===b));set(b.dataset[attr]);render();};};
 segBind('unitSeg','u',v=>UNIT=v); segBind('ritmoSeg','r',v=>RITMO=v); segBind('granSeg','g',v=>GRAN=v); segBind('normSeg','n',v=>NORM=v);
-['fPeriodo','fMes','fTemp','fDesde','fHasta','fCanal','fFamilia','tA','tB','tLoc','rLoc','rRef'].forEach(id=>$(id).addEventListener('change',render));
+['iMes','fPeriodo','fMes','fTemp','fDesde','fHasta','fCanal','fFamilia','tA','tB','tLoc','rLoc','rRef'].forEach(id=>$(id).addEventListener('change',render));
 $('rankSearch').addEventListener('input',render);
+let iT; document.querySelectorAll('.inp-grid input').forEach(x=>x.addEventListener('input',()=>{clearTimeout(iT);iT=setTimeout(render,400);})); $('iCom').addEventListener('input',()=>{clearTimeout(iT);iT=setTimeout(render,600);});
 $('trendAdd').onchange=e=>{const c=e.target.value;if(c&&!trendSel.includes(c)){if(trendSel.length>=4)trendSel.shift();trendSel.push(c);}e.target.value='';render();};
 let rT;window.addEventListener('resize',()=>{clearTimeout(rT);rT=setTimeout(render,200);});
 
@@ -843,179 +981,6 @@ function makeDemo(){
   Object.keys(sab).forEach(c=>Object.keys(S).forEach(l=>{const b=Math.round(rnd()*(c==10||c==12?14:6));S[l][c]={bachas:b,baldes:0,kg_bachas:b*4,kg_baldes:0};}));
   const arts={};Object.keys(sab).forEach(c=>arts[c]={nombre:sab[c]});
   return {hist:H,ped:P,stock:S,arts,fam};
-}
-
-/* ═══════════ CHECKLISTS (datos desde el Apps Script de los checklists) ═══════════ */
-let CK = {key:null, data:null, loading:false, err:null, pdf:null};
-const ckClave = () => { try{return sessionStorage.getItem('ipa_ck')||'';}catch(e){return '';} };
-const isoLocal = t => {const d=new Date(t);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');};
-const ckCls = p => p>=85?'st-good':p>=60?'st-warn':'st-crit';
-const ckCol = p => p>=85?'var(--good)':p>=60?'var(--warn)':'var(--crit)';
-
-async function ckCall(accion, extra){
-  const ctl = new AbortController(); const to = setTimeout(()=>ctl.abort(), 60000);
-  try{
-    const r = await fetch(CHECKLIST_URL,{method:'POST',body:JSON.stringify(Object.assign({accion,clave:ckClave()},extra||{})),signal:ctl.signal});
-    if(!r.ok) throw new Error('HTTP '+r.status);
-    const j = await r.json();
-    if(!j.ok) throw new Error(j.error||'Error del servidor');
-    return j.data;
-  }catch(e){
-    if(e.name==='AbortError') throw new Error('El servidor no respondió a tiempo. Probá de nuevo.');
-    if(e instanceof TypeError) throw new Error('No se pudo conectar con los checklists (revisá la URL del Apps Script y que esté implementado para "Cualquier usuario").');
-    throw e;
-  } finally { clearTimeout(to); }
-}
-
-function ckRange(R){
-  let a=R.a, b=Math.min(R.b, Date.now()), note='';
-  if(b-a>365*DAY){ a=b-365*DAY; note='El período se recortó al último año.'; }
-  return {desde:isoLocal(a), hasta:isoLocal(b), note};
-}
-
-function ckLogin(){
-  const v=$('ckClaveIn').value.trim(); if(!v) return;
-  try{sessionStorage.setItem('ipa_ck',v);}catch(e){}
-  $('ckClaveIn').value=''; $('ckLoginErr').textContent=''; CK.key=null; render();
-}
-$('ckClaveIn').addEventListener('keydown',e=>{if(e.key==='Enter')ckLogin();});
-
-async function ckLoad(p){
-  CK.loading=true; CK.err=null; CK.pdf=null; render();
-  try{ CK.data = await ckCall('periodo',{desde:p.desde,hasta:p.hasta}); }
-  catch(e){
-    CK.data=null; CK.err=e.message;
-    if(/clave/i.test(e.message)){ try{sessionStorage.removeItem('ipa_ck');}catch(_){} $('ckLoginErr').textContent=e.message; }
-  }
-  CK.loading=false; render();
-}
-
-async function ckPdf(){
-  const p=ckRange(getRange()); $('ckPdfBtn').disabled=true; $('ckPdfMsg').textContent='Generando PDF…';
-  try{
-    const r=await ckCall('pdf',{desde:p.desde,hasta:p.hasta});
-    CK.pdf=r; $('ckPdfMsg').innerHTML=`✓ ${esc(r.nombre)} — <a href="${esc(r.url)}" target="_blank" rel="noopener">Abrir / descargar PDF</a>`;
-  }catch(e){ $('ckPdfMsg').textContent='No se pudo generar el PDF: '+e.message; }
-  $('ckPdfBtn').disabled=false;
-}
-
-CK.falLoc='todos';
-const ckDelta=(cur,prev)=>{ if(prev==null) return ''; const x=cur-prev; if(x===0) return '<div class="hint" style="text-align:right">= igual</div>';
-  return `<div class="hint" style="text-align:right"><span class="${x>0?'up':'down'}">${x>0?'▲ +':'▼ '}${x} pts</span> vs anterior</div>`; };
-const TL = t => t==='apertura'?'Apertura':'Cierre';
-const trunc = (s,n) => { s=String(s||''); return s.length>n? s.slice(0,n-1)+'…' : s; };
-
-function ckSerieBuckets(serie, days){
-  // Diario hasta 45 días; después, promedio semanal
-  if(days<=45) return {labels:serie.map(p=>{const d=new Date(p.f+'T00:00');return d.getDate()+'/'+(d.getMonth()+1);}), A:serie.map(p=>p.a), C:serie.map(p=>p.c)};
-  const m={}; serie.forEach(p=>{const k=weekKey(new Date(p.f+'T00:00').getTime()); const o=m[k]=m[k]||{a:[],c:[]}; if(p.a!=null)o.a.push(p.a); if(p.c!=null)o.c.push(p.c);});
-  const ks=Object.keys(m).map(Number).sort((x,y)=>x-y), avg=a=>a.length?Math.round(a.reduce((s,v)=>s+v,0)/a.length):null;
-  return {labels:ks.map(weekLbl), A:ks.map(k=>avg(m[k].a)), C:ks.map(k=>avg(m[k].c))};
-}
-
-function ckCharts(d,R){
-  const loc=[...d.locales].sort((a,b)=>a.nombre.localeCompare(b.nombre));
-  $('ckCharts').innerHTML=loc.map(l=>{
-    const hay=l.serie&&l.serie.length;
-    return `<div class="card"><div class="row" style="justify-content:space-between"><h3>${esc(l.nombre)}</h3><b class="${ckCls(l.ponderado)}" style="font-size:18px">${l.ponderado}%</b></div>
-      <div class="sub">Apertura ${l.apertura.n?l.apertura.kpi+'%':'—'} · Cierre ${l.cierre.n?l.cierre.kpi+'%':'—'}</div>
-      ${hay?`<div class="chartbox" style="height:230px"><canvas id="ckc_${esc(l.id)}"></canvas></div>`:'<div class="empty">Sin envíos en el período</div>'}</div>`;}).join('');
-  const s1=css('--s1'), s2=css('--s2'), mu=css('--muted');
-  loc.forEach(l=>{
-    if(!(l.serie&&l.serie.length)) return;
-    const b=ckSerieBuckets(l.serie,R.days);
-    mkChart('ckc_'+l.id,{type:'line',fmt:v=>fmt(v,0)+'%',data:{labels:b.labels,datasets:[
-      {label:'Apertura',data:b.A,borderColor:s1,backgroundColor:s1,tension:.25,pointRadius:3,borderWidth:2,spanGaps:true},
-      {label:'Cierre',data:b.C,borderColor:s2,backgroundColor:s2,tension:.25,pointRadius:3,borderWidth:2,spanGaps:true},
-      {label:'Meta 85%',data:b.labels.map(()=>85),borderColor:mu,borderDash:[4,4],borderWidth:1,pointRadius:0,pointHoverRadius:0}]},
-      options:{scales:{y:{min:0,max:100,ticks:{callback:v=>v+'%',stepSize:25}},x:{ticks:{maxRotation:0,autoSkip:true,maxTicksLimit:8}}}}});
-  });
-}
-
-function ckFallas(d){
-  // selector: todos / local / encargado
-  const sel=$('ckFalSel'), ls=[...d.locales].sort((a,b)=>a.nombre.localeCompare(b.nombre)), es=[...d.encargados].sort((a,b)=>a.nombre.localeCompare(b.nombre));
-  const vals=['todos'].concat(ls.map(l=>'l:'+l.id),es.map(e=>'e:'+e.nombre));
-  if(!vals.includes(CK.falLoc)) CK.falLoc='todos';
-  sel.innerHTML='<option value="todos">Todos los locales</option>'+
-    '<optgroup label="Por local">'+ls.map(l=>`<option value="l:${esc(l.id)}">${esc(l.nombre)}</option>`).join('')+'</optgroup>'+
-    (es.length?'<optgroup label="Por encargado">'+es.map(e=>`<option value="e:${esc(e.nombre)}">${esc(e.nombre)}</option>`).join('')+'</optgroup>':'');
-  sel.value=CK.falLoc;
-  sel.onchange=()=>{CK.falLoc=sel.value;render();};
-  let src, nomLoc;
-  if(CK.falLoc==='todos'){ src=d.fallas; nomLoc='todos los locales'; }
-  else if(CK.falLoc[0]==='l'){ const l=ls.find(x=>'l:'+x.id===CK.falLoc)||{}; src=l.fallas||[]; nomLoc=l.nombre; }
-  else { const e=es.find(x=>'e:'+x.nombre===CK.falLoc)||{}; src=e.fallas||[]; nomLoc='encargado/a '+e.nombre; }
-  $('ckFalSub').textContent=`${nomLoc} · % de veces que cada punto de control falló sobre las veces que se evaluó`;
-  const rows=(src||[]).filter(f=>f.fallas>0);
-  const top=rows.slice(0,10);
-  if(!top.length){
-    if(charts.cckFal){charts.cckFal.destroy();delete charts.cckFal;}
-    $('ckFalTbl').innerHTML='<div class="empty">Sin fallas registradas en el período 🎉</div>'; lastTables.ckfal={cols:[],rows:[]}; return;
-  }
-  const colr=p=>p>=30?css('--crit'):p>=10?css('--warn'):css('--good');
-  mkChart('cckFal',{type:'bar',fmt:v=>fmt(v,0)+'%',data:{labels:top.map(f=>trunc(f.label,34)+' ('+(f.turno==='apertura'?'A':'C')+')'),
-    datasets:[{label:'% de falla',data:top.map(f=>f.pct),backgroundColor:top.map(f=>colr(f.pct)),borderRadius:4}]},
-    options:{indexAxis:'y',scales:{x:{min:0,max:100,ticks:{callback:v=>v+'%'}},y:{ticks:{autoSkip:false}}}}});
-  table('ckFalTbl',[
-    {t:'Punto de control',l:1,sv:r=>r.label,f:r=>`<span style="white-space:normal;display:inline-block;min-width:160px;max-width:260px">${esc(r.label)}</span>`,csv:r=>r.label},
-    {t:'Turno',l:1,sv:r=>r.turno,f:r=>TL(r.turno),csv:r=>TL(r.turno)},
-    {t:'Fallas',sv:r=>r.fallas,f:r=>r.fallas+' <span class="hint">de '+r.total+'</span>',csv:r=>r.fallas+' de '+r.total},
-    {t:'% falla',sv:r=>r.pct,f:r=>`<b style="color:${colr(r.pct)}">${r.pct}%</b>`,csv:r=>r.pct+'%'},
-    {t:'Fotos inv.',sv:r=>r.invalidadas,f:r=>r.invalidadas?`<span class="tag">${r.invalidadas}</span>`:'—',csv:r=>r.invalidadas}
-  ],rows,{key:'ckfal'});
-}
-
-function rChecklists(R){
-  const logged = !!ckClave();
-  $('ckLogin').style.display = logged?'none':'block';
-  $('ckMain').style.display = logged?'block':'none';
-  if(!logged) return;
-  const p=ckRange(R), key=p.desde+'|'+p.hasta+'|'+ckClave();
-  if(CK.key!==key){ CK.key=key; ckLoad(p); return; }
-  const st=$('ckStatus');
-  if(CK.loading){ st.style.display='block'; st.textContent='Cargando checklists…'; return; }
-  if(CK.err){ st.style.display='block'; st.innerHTML='⚠️ '+esc(CK.err)+' <a href="#" onclick="CK.key=null;render();return false">Reintentar</a>'; ['ckKpis','ckCharts','ckLocTbl','ckEncTbl','ckFalTbl'].forEach(i=>$(i).innerHTML=''); return; }
-  const d=CK.data; if(!d) return;
-  st.style.display=p.note?'block':'none'; st.textContent=p.note;
-  const L=d.locales, E=d.encargados, PV=d.previo||{locales:{},encargados:{}};
-  const conDatos=L.filter(l=>l.apertura.n+l.cierre.n>0);
-  const prom=conDatos.length?Math.round(conDatos.reduce((s,l)=>s+l.ponderado,0)/conDatos.length):0;
-  const pvVals=conDatos.map(l=>PV.locales[l.id]).filter(v=>v!=null);
-  const promPrev=pvVals.length?Math.round(pvVals.reduce((s,v)=>s+v,0)/pvVals.length):null;
-  const bestL=conDatos[0], bestE=E[0], weak=(d.fallas||[]).find(f=>f.fallas>0);
-  const kpi=(l,v,dd)=>`<div class="card kpi"><div class="lbl">${l}</div><div class="val">${v}</div><div class="d">${dd}</div></div>`;
-  const dl=(c,pv)=>pv==null?'':(c===pv?' · = igual':` · <span class="${c>pv?'up':'down'}">${c>pv?'▲ +':'▼ -'}${Math.abs(c-pv)} pts</span>`);
-  $('ckKpis').innerHTML=
-    kpi('Puntaje promedio de locales',`<span class="${ckCls(prom)}">${prom}%</span>`,'apertura + cierre'+dl(prom,promPrev)+(promPrev!=null?' vs anterior':''))+
-    kpi('Mejor local',bestL?esc(bestL.nombre):'—',bestL?`<span class="${ckCls(bestL.ponderado)}">${bestL.ponderado}%</span>`+dl(bestL.ponderado,PV.locales[bestL.id]):'sin datos')+
-    kpi('Mejor encargado',bestE?esc(bestE.nombre):'—',bestE?`<span class="${ckCls(bestE.kpi)}">${bestE.kpi}%</span> · ${bestE.n} checklists`+dl(bestE.kpi,PV.encargados[bestE.nombre]):'sin datos')+
-    kpi('Punto más débil',weak?esc(trunc(weak.label,26)):'—',weak?`<span class="down">${weak.pct}% de falla</span> · ${weak.fallas} de ${weak.total} · ${TL(weak.turno)}`:'sin fallas');
-  try{ if(typeof Chart!=='undefined') ckCharts(d,R); else $('ckCharts').innerHTML='<div class="banner">No se pudieron cargar los gráficos (revisá la conexión). Las tablas siguen disponibles.</div>'; }catch(e){ console.warn('ckCharts',e); }
-  const score=(v)=>`<div style="display:flex;align-items:center;gap:8px;justify-content:flex-end"><div style="width:70px;height:8px;border-radius:4px;background:var(--surface-2)"><div class="bar" style="width:${Math.max(0,Math.min(100,v))}%;background:${ckCol(v)}"></div></div><b class="${ckCls(v)}" style="min-width:42px">${v}%</b></div>`;
-  const turno=t=>t.n?`${t.kpi}% <span class="hint">(${t.n})</span>`:'<span class="hint">sin envíos</span>';
-  $('ckLocSub').textContent=`${Math.round(d.pesos.apertura*100)}% apertura + ${Math.round(d.pesos.cierre*100)}% cierre · entre paréntesis, cantidad de envíos · variación vs el período anterior de igual largo`;
-  table('ckLocTbl',[
-    {t:'#',sv:r=>L.indexOf(r),f:r=>L.indexOf(r)+1,csv:r=>L.indexOf(r)+1},
-    {t:'Local',l:1,k:'nombre'},
-    {t:'Apertura',sv:r=>r.apertura.n?r.apertura.kpi:-1,f:r=>turno(r.apertura),csv:r=>r.apertura.n?r.apertura.kpi+'%':''},
-    {t:'Cierre',sv:r=>r.cierre.n?r.cierre.kpi:-1,f:r=>turno(r.cierre),csv:r=>r.cierre.n?r.cierre.kpi+'%':''},
-    {t:'A tiempo',sv:r=>(r.apertura.n+r.cierre.n)?(r.apertura.aTiempo*r.apertura.n+r.cierre.aTiempo*r.cierre.n)/(r.apertura.n+r.cierre.n):-1,
-      f:r=>{const n=r.apertura.n+r.cierre.n;return n?Math.round((r.apertura.aTiempo*r.apertura.n+r.cierre.aTiempo*r.cierre.n)/n)+'%':'—';}},
-    {t:'Puntaje',sv:r=>r.ponderado,f:r=>score(r.ponderado)+ckDelta(r.ponderado,PV.locales[r.id])+(r.incompleto?'<div class="hint" style="text-align:right">falta un turno: cuenta 0</div>':''),csv:r=>r.ponderado+'%'}
-  ],L,{key:'ckloc'});
-  try{ ckFallas(d); }catch(e){ console.warn('ckFallas',e); }
-  $('ckEncSub').textContent='Promedio general del KPI combinado (checklist + puntualidad) de todos los checklists que cargó cada uno · variación vs el período anterior';
-  table('ckEncTbl',[
-    {t:'#',sv:r=>E.indexOf(r),f:r=>E.indexOf(r)+1,csv:r=>E.indexOf(r)+1},
-    {t:'Encargado',l:1,k:'nombre'},
-    {t:'Checklists',k:'n'},{t:'Aperturas',k:'aperturas'},{t:'Cierres',k:'cierres'},
-    {t:'A tiempo',sv:r=>r.aTiempo,f:r=>r.aTiempo+'%'},
-    {t:'Punto más débil',l:1,sv:r=>{const f=(r.fallas||[]).find(x=>x.fallas>0);return f?f.pct:-1;},f:r=>{const f=(r.fallas||[]).find(x=>x.fallas>0);return f?`<span style="white-space:normal;display:inline-block;min-width:150px;max-width:230px">${esc(f.label)} <b class="down">${f.pct}%</b></span>`:'—';},csv:r=>{const f=(r.fallas||[]).find(x=>x.fallas>0);return f?f.label+' ('+f.pct+'%)':'';}},
-    {t:'Locales',l:1,sv:r=>r.locales.join(', '),f:r=>esc(r.locales.join(', ')),csv:r=>r.locales.join(', ')},
-    {t:'Puntaje',sv:r=>r.kpi,f:r=>score(r.kpi)+ckDelta(r.kpi,PV.encargados[r.nombre]),csv:r=>r.kpi+'%'}
-  ],E,{key:'ckenc'});
-  $('ckFoot').textContent='Si un turno no tiene envíos en el período, cuenta 0 para el local. Los días sin envío no restan. Si hay dos envíos del mismo turno el mismo día, vale el último. Las fotos invalidadas ya cuentan como falla ("Fotos inv." = cuántas de las fallas fueron invalidadas por vos).';
 }
 
 /* ═══════════ INIT ═══════════ */
