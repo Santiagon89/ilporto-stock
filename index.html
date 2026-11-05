@@ -531,6 +531,16 @@ tbody tr:last-child td{border:none}
             <div class="pills">
               <div class="pill" id="pill-ing" onclick="setTipo('INGRESO')">➕ Ingreso</div>
               <div class="pill" id="pill-egr" onclick="setTipo('EGRESO')">➖ Egreso</div>
+              <div class="pill" id="pill-des" onclick="setTipo('DESPERDICIO')">🗑 Desperdicio</div>
+            </div>
+            <div id="motivo-wrap" style="display:none;margin-top:.5rem">
+              <label>Motivo del desperdicio</label>
+              <select id="inp-motivo" style="width:100%">
+                <option value="Arenoso">Arenoso</option>
+                <option value="Mal estado / vencido">Mal estado / vencido</option>
+                <option value="Derrame / accidente">Derrame / accidente</option>
+                <option value="Otro">Otro</option>
+              </select>
             </div>
           </div>
           <!-- Recipiente -->
@@ -744,12 +754,18 @@ tbody tr:last-child td{border:none}
     </div>
     <div style="display:flex;gap:.65rem;flex-wrap:wrap">
       <select id="inf-loc-sel" onchange="renderInformes()" style="width:auto;padding:.4rem .8rem;font-size:.8rem"><option value="todos">Todos los locales</option><option value="fabrica">🏭 Fábrica</option><option value="puerto">⚓ Puerto</option><option value="labarra">🍹 La Barra</option><option value="gorlero">🌊 Gorlero</option></select>
-      <select id="inf-periodo" onchange="renderInformes()" style="width:auto;padding:.45rem .9rem;font-size:.82rem">
+      <select id="inf-periodo" onchange="onInfPeriodo()" style="width:auto;padding:.45rem .9rem;font-size:.82rem">
         <option value="7">Últimos 7 días</option>
         <option value="30" selected>Últimos 30 días</option>
         <option value="90">Últimos 90 días</option>
         <option value="0">Todo el historial</option>
+        <option value="-1">📅 Rango de fechas</option>
       </select>
+      <span id="inf-rango" style="display:none;gap:.4rem;align-items:center">
+        <input type="date" id="inf-desde" onchange="renderInformes()" style="width:auto;padding:.38rem .6rem;font-size:.8rem">
+        <span style="color:var(--muted2);font-size:.8rem">a</span>
+        <input type="date" id="inf-hasta" onchange="renderInformes()" style="width:auto;padding:.38rem .6rem;font-size:.8rem">
+      </span>
       <button class="dl-btn" onclick="exportInformeExcel()">⬇ Exportar informe</button>
     </div>
   </div>
@@ -1292,9 +1308,35 @@ var DATA_despachos = [];
 function fbUrl(p){return FB_DB+'/'+p+'.json';}
 function fbGet(p){return fetch(fbUrl(p)).then(function(r){return r.json();}).catch(function(){return null;});}
 function fbSet(p,d){return fetch(fbUrl(p),{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(function(e){console.error('fbSet:',e);});}
+function fbGetQ(p,q){return fetch(FB_DB+'/'+p+'.json?'+q).then(function(r){return r.json();}).catch(function(){return null;});}
+var histLastKey='', histSigs={}, despLastKey='', pedLastKey='';
+function histSig(h){return h.ts+'|'+h.loc+'|'+h.cod+'|'+h.tipo+'|'+(h.cant||1);}
+function rebuildLocHist(){LOCS.forEach(function(l){state[l].history=globalHistory.filter(function(x){return x.loc===l;});});}
+function setHistFull(hd){
+  var arr=[]; histSigs={}; histLastKey='';
+  Object.keys(hd||{}).forEach(function(k){var x=hd[k]; if(!x||typeof x!=='object')return; arr.push(x); if(k>histLastKey)histLastKey=k;});
+  arr.sort(function(a,b){return b.ts-a.ts;});
+  arr.forEach(function(x){histSigs[histSig(x)]=1;});
+  globalHistory=arr; rebuildLocHist();
+}
+function mergeHistNew(hd){
+  if(!hd||hd.error) return false; var added=false;
+  Object.keys(hd).forEach(function(k){
+    if(k>histLastKey)histLastKey=k;
+    var x=hd[k]; if(!x||typeof x!=='object')return;
+    var s=histSig(x); if(histSigs[s])return;
+    histSigs[s]=1; globalHistory.push(x); added=true;
+  });
+  if(added){globalHistory.sort(function(a,b){return b.ts-a.ts;}); rebuildLocHist();}
+  return added;
+}
+function syncHistNew(){
+  var q='orderBy='+encodeURIComponent('"$key"')+(histLastKey?'&startAt='+encodeURIComponent('"'+histLastKey+'"'):'');
+  return fbGetQ('historial',q).then(mergeHistNew);
+}
 function fbPush(p,d){return fetch(fbUrl(p),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(function(e){console.error('fbPush:',e);});}
 function saveStock(loc,cod){var d=(state[loc]&&state[loc].stock[cod])||{bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};return fbSet('stock/'+loc+'/'+cod,d);}
-function saveHistorial(h){return fbPush('historial',{ts:h.ts||Date.now(),fecha:h.fecha||'',hora:h.hora||'',loc:h.loc,usuario:h.usuario||'—',cod:String(h.cod),tipo:h.tipo,recip:h.recip,cant:h.cant||1,pesoTotal:h.pesoTotal||0,pesoUnit:h.pesoUnit||0,nom:h.nom||''});}
+function saveHistorial(h){histSigs[histSig(h)]=1;return fbPush('historial',{ts:h.ts||Date.now(),fecha:h.fecha||'',hora:h.hora||'',loc:h.loc,usuario:h.usuario||'—',cod:String(h.cod),tipo:h.tipo,recip:h.recip,cant:h.cant||1,pesoTotal:h.pesoTotal||0,pesoUnit:h.pesoUnit||0,nom:h.nom||'',motivo:h.motivo||''});}
 function saveLimitesDB(loc,cod){var l=(state[loc]&&state[loc].limits[String(cod)])||{min_b:1,max_b:12,min_v:1,max_v:12};return fbSet('limites/'+loc+'/'+cod,l);}
 function saveArticuloDB(cod,nombre){return fbSet('articulos/'+cod,{nombre:nombre||''});}
 function saveDespacho(d){return fbPush('despachos',d);}
@@ -1308,9 +1350,9 @@ async function loadFromDB(){
     var ad=await fbGet('articulos');
     if(ad){Object.keys(ad).forEach(function(cod){articulos[cod]=ad[cod];});}
     var hd=await fbGet('historial');
-    if(hd){globalHistory=Object.values(hd).sort(function(a,b){return b.ts-a.ts;}).slice(0,500);LOCS.forEach(function(loc){state[loc].history=globalHistory.filter(function(h){return h.loc===loc;});});}
+    if(hd){setHistFull(hd);}
     var dd=await fbGet('despachos');
-    if(dd){DATA_despachos=Object.values(dd).sort(function(a,b){return b.ts-a.ts;});}
+    if(dd){DATA_despachos=Object.values(dd).sort(function(a,b){return b.ts-a.ts;});Object.keys(dd).forEach(function(k){if(k>despLastKey)despLastKey=k;});}
     Object.keys(CODES_INIT).forEach(function(c){LOCS.forEach(function(loc){if(!state[loc].stock[c])state[loc].stock[c]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};if(!state[loc].limits[c])state[loc].limits[c]={min_b:1,max_b:12,min_v:1,max_v:12};});if(!articulos[c])articulos[c]={nombre:''};});
     setSyncOk(true);
   }catch(e){console.error('Firebase:',e);setSyncOk(false);toast('Sin conexión — modo offline','err');loadFromLocal();}
@@ -1320,8 +1362,7 @@ async function refreshLoc(loc){
   try{
     var sd=await fbGet('stock/'+loc);
     if(sd&&state[loc]){Object.keys(sd).forEach(function(cod){state[loc].stock[cod]=sd[cod];});}
-    var hd=await fbGet('historial');
-    if(hd){globalHistory=Object.values(hd).sort(function(a,b){return b.ts-a.ts;}).slice(0,500);LOCS.forEach(function(l){state[l].history=globalHistory.filter(function(h){return h.loc===l;});});}
+    await syncHistNew();
     if(loc===curLoc)renderAll();
     setSyncOk(true);
   }catch(e){setSyncOk(false);}
@@ -1382,6 +1423,8 @@ function setTipo(t) {
   curTipo = t;
   document.getElementById('pill-ing').className = 'pill'+(t==='INGRESO'?' p-ing':'');
   document.getElementById('pill-egr').className = 'pill'+(t==='EGRESO'?' p-egr':'');
+  var pd=document.getElementById('pill-des'); if(pd) pd.className = 'pill'+(t==='DESPERDICIO'?' p-egr':'');
+  var mw=document.getElementById('motivo-wrap'); if(mw) mw.style.display = t==='DESPERDICIO'?'':'none';
 }
 function setRecip(r) {
   curRecip = r;
@@ -1470,7 +1513,7 @@ function registrar() {
   if(SESSION && SESSION.rol==='sucursal' && SESSION.loc!==curLoc) {
     toast('⛔ No tenés permiso para modificar ' + (LOC_NAMES[curLoc]||curLoc), 'err'); return;
   }
-  if(!curTipo)  { toast('Seleccioná INGRESO o EGRESO','err'); return; }
+  if(!curTipo)  { toast('Seleccioná INGRESO, EGRESO o DESPERDICIO','err'); return; }
   if(!curRecip) { toast('Seleccioná BACHA o BALDE','err'); return; }
   if(!peso||peso<=0) { toast('Ingresá un peso válido','err'); return; }
   if(cant<1)    { toast('La cantidad debe ser al menos 1','err'); return; }
@@ -1502,10 +1545,10 @@ function registrar() {
     cod, tipo:curTipo, recip:curRecip, cant, pesoTotal:peso, pesoUnit:base,
     nom: articulos[cod]?.nombre||''
   };
+  if(curTipo==='DESPERDICIO') entry.motivo = (document.getElementById('inp-motivo')||{}).value||'';
   state[curLoc].history.unshift(entry);
   if(state[curLoc].history.length>100) state[curLoc].history.pop();
   globalHistory.unshift(entry);
-  if(globalHistory.length>500) globalHistory.pop();
 
   save();
   saveStock(curLoc, cod);
@@ -1514,8 +1557,8 @@ function registrar() {
   var signR = curTipo==='INGRESO'?'+':'-';
   var icoR  = curRecip==='BACHA'?'🫙':'🪣';
   showConfirmModal(
-    curTipo==='INGRESO'?'✅':'📤',
-    curTipo+' registrado',
+    curTipo==='INGRESO'?'✅':(curTipo==='DESPERDICIO'?'🗑':'📤'),
+    (curTipo==='DESPERDICIO'?'Desperdicio':curTipo)+' registrado',
     icoR+' '+cant+' '+(curRecip==='BACHA'?'bacha':'balde')+'(s) · '+peso.toFixed(3)+' kg · COD '+cod
   );
 
@@ -1606,7 +1649,7 @@ function renderHist() {
     <div class="hist-row">
       <span class="mono" style="color:var(--c1)">${h.cod}</span>
       <span style="color:var(--muted2);font-size:.78rem">${h.recip==='BACHA'?'🫙':'🪣'} ×${h.cant||1}</span>
-      <span class="hist-badge ${h.tipo==='INGRESO'?'b-ing':'b-egr'}">${h.tipo==='INGRESO'?'+':'-'}</span>
+      <span class="hist-badge ${h.tipo==='INGRESO'?'b-ing':'b-egr'}" title="${h.motivo||''}">${h.tipo==='INGRESO'?'+':(h.tipo==='DESPERDICIO'?'🗑':'-')}</span>
       <span class="mono" style="font-size:.79rem">${(h.pesoTotal||h.peso||0).toFixed(3)}kg</span>
     </div>`).join('');
 }
@@ -1721,11 +1764,20 @@ function deleteArticulo(cod, e) {
 // ══════════════════════════════════════════════════════════════════════════════
 // INFORMES
 // ══════════════════════════════════════════════════════════════════════════════
+function onInfPeriodo(){
+  const r=document.getElementById('inf-rango');
+  if(r) r.style.display = document.getElementById('inf-periodo').value==='-1' ? 'flex' : 'none';
+  renderInformes();
+}
 function getFilteredHist() {
   const dias=parseInt(document.getElementById('inf-periodo').value);
   const loc=document.getElementById('inf-loc-sel')?.value||'todos';
   let h = globalHistory;
-  if(dias) { const cutoff=Date.now()-dias*24*60*60*1000; h=h.filter(x=>x.ts>=cutoff); }
+  if(dias===-1){
+    const d0=document.getElementById('inf-desde').value, d1=document.getElementById('inf-hasta').value;
+    if(d0){ const t0=new Date(d0+'T00:00:00').getTime(); h=h.filter(x=>x.ts>=t0); }
+    if(d1){ const t1=new Date(d1+'T23:59:59').getTime(); h=h.filter(x=>x.ts<=t1); }
+  } else if(dias>0) { const cutoff=Date.now()-dias*24*60*60*1000; h=h.filter(x=>x.ts>=cutoff); }
   if(loc!=='todos') h=h.filter(x=>x.loc===loc);
   return h;
 }
@@ -1746,7 +1798,7 @@ function renderInformes() {
       ingByLoc[h.loc][h.cod]=(ingByLoc[h.loc][h.cod]||0)+(h.cantidad||h.cant||1);
       if(h.recip==='BACHA') kgByLoc[h.loc].b+=h.pesoTotal||0;
       else kgByLoc[h.loc].v+=h.pesoTotal||0;
-    } else {
+    } else if(h.tipo==='EGRESO'){
       egrByLoc[h.loc][h.cod]=(egrByLoc[h.loc][h.cod]||0)+(h.cantidad||h.cant||1);
     }
   });
@@ -1801,8 +1853,8 @@ function renderInformes() {
   }).join('');
 
   // ── Historial tabla ───────────────────────────────────────────────────────
-  document.getElementById('hist-count-label').textContent=`${hist.length} registros`;
-  document.getElementById('hist-tbody').innerHTML=hist.length?hist.map(h=>{
+  document.getElementById('hist-count-label').textContent=`${hist.length} registros`+(hist.length>500?' · mostrando los 500 más recientes (el Excel trae todos)':'');
+  document.getElementById('hist-tbody').innerHTML=hist.length?hist.slice(0,500).map(h=>{
     const isCross = h.locUsuario && h.locUsuario !== h.loc;
     const rowStyle = isCross ? 'style="background:rgba(255,82,82,.07)"' : '';
     const warn = isCross ? '<span style="color:var(--red);margin-left:.3rem" title="Modificó desde otro local">⚠</span>' : '';
@@ -1908,7 +1960,7 @@ function exportInformeExcel() {
   const wb = XLSX.utils.book_new();
   // Resumen por código
   const ingMap={},egrMap={};
-  hist.forEach(h=>{ if(h.tipo==='INGRESO') ingMap[h.cod]=(ingMap[h.cod]||0)+h.cant; else egrMap[h.cod]=(egrMap[h.cod]||0)+h.cant; });
+  hist.forEach(h=>{ if(h.tipo==='INGRESO') ingMap[h.cod]=(ingMap[h.cod]||0)+h.cant; else if(h.tipo==='EGRESO') egrMap[h.cod]=(egrMap[h.cod]||0)+h.cant; });
   const allCods=[...new Set(hist.map(h=>h.cod))].sort((a,b)=>a-b);
   const resumRows=[['Código','Nombre','Ingresos (unid)','Egresos (unid)','Neto']];
   allCods.forEach(c=>resumRows.push([c,articulos[c]?.nombre||'',ingMap[c]||0,egrMap[c]||0,(ingMap[c]||0)-(egrMap[c]||0)]));
@@ -2018,27 +2070,31 @@ function toast(msg,type='ok'){
 function updateClock(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit',second:'2-digit'});}
 updateClock(); setInterval(updateClock,1000);
 
-// Auto-refresh cada 10 segundos
+// Auto-refresh cada 15 segundos (solo novedades; pausa si la pestaña está oculta)
 setInterval(function(){
-  fbGet('stock').then(function(sd){
+  if(document.hidden || !SESSION) return;
+  var suc = SESSION.rol==='sucursal';
+  fbGet(suc ? 'stock/'+SESSION.loc : 'stock').then(function(sd){
     if(!sd) return;
-    Object.keys(sd).forEach(function(loc){
-      if(!state[loc]) return;
-      Object.keys(sd[loc]).forEach(function(cod){
-        state[loc].stock[cod] = sd[loc][cod];
-      });
-    });
-    fbGet('historial').then(function(hd){
-      if(hd){
-        globalHistory = Object.values(hd).sort(function(a,b){return b.ts-a.ts;}).slice(0,500);
-        LOCS.forEach(function(loc){
-          state[loc].history = globalHistory.filter(function(h){return h.loc===loc;});
-        });
-      }
-      renderAll();
-    });
+    if(suc){ Object.keys(sd).forEach(function(cod){ state[SESSION.loc].stock[cod]=sd[cod]; }); }
+    else { Object.keys(sd).forEach(function(loc){ if(!state[loc]) return; Object.keys(sd[loc]).forEach(function(cod){ state[loc].stock[cod]=sd[loc][cod]; }); }); }
+  }).then(function(){
+    return syncHistNew();
+  }).then(function(){
+    return fbGetQ('despachos','orderBy='+encodeURIComponent('"$key"')+(despLastKey?'&startAt='+encodeURIComponent('"'+despLastKey+'"'):''));
+  }).then(function(dd){
+    if(dd && !dd.error){
+      var have={}; DATA_despachos.forEach(function(d){have[d.ts]=1;});
+      Object.keys(dd).forEach(function(k){ if(k>despLastKey) despLastKey=k; if(dd[k] && !have[dd[k].ts]) DATA_despachos.push(dd[k]); });
+      DATA_despachos.sort(function(a,b){return b.ts-a.ts;});
+    }
+    return (SESSION.rol!=='sucursal' && window._pedLoaded) ? syncPedidosNew() : null;
+  }).then(function(){
+    renderAll();
+    if(typeof renderPedidosFab==='function' && window._pedLoaded) renderPedidosFab();
+    if(typeof renderNotifPanel==='function') renderNotifPanel();
   }).catch(function(){});
-}, 10000);
+}, 15000);
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -2138,6 +2194,13 @@ function initCierre() {
     ingMap[c] += h.pesoTotal || 0;
   });
   cierreData.ingresos = ingMap;
+  var despMap = {};
+  globalHistory.filter(function(h) {
+    if (h.loc !== loc || h.tipo !== 'DESPERDICIO' || !h.fecha) return false;
+    var fp = h.fecha.split('/');
+    return fp[2] === year && fp[1] === month;
+  }).forEach(function(h) { var c = String(h.cod); despMap[c] = (despMap[c]||0) + (h.pesoTotal||0); });
+  cierreData.desperdicio = despMap;
 
   // Stock inicial = stock actual - ingresos del mes
   var siMap = {};
@@ -2145,7 +2208,7 @@ function initCierre() {
     var d = stk[c];
     var totalKg = (d.kg_bachas || 0) + (d.kg_baldes || 0);
     var ing = ingMap[c] || 0;
-    var inicial = totalKg - ing;
+    var inicial = totalKg - ing + ((cierreData.desperdicio||{})[c]||0);
     if (totalKg > 0 || ing > 0) {
       siMap[c] = { kg: parseFloat(inicial.toFixed(3)), kgActual: totalKg };
     }
@@ -2477,12 +2540,13 @@ function calcularDiferencias() {
     // Distribuir ventas proporcionalmente al stock inicial
     var propVentas = totalStockInicial > 0 ? (si / totalStockInicial) * ventasTotalKg : 0;
     propVentas = parseFloat(propVentas.toFixed(3));
-    var teorico = parseFloat((si + ing - propVentas).toFixed(3));
+    var desp = (cierreData.desperdicio||{})[c] || 0;
+    var teorico = parseFloat((si + ing - propVentas - desp).toFixed(3));
     var real    = cierreData.finalKg[c] !== undefined ? cierreData.finalKg[c] : null;
     var dif     = real !== null ? parseFloat((real - teorico).toFixed(3)) : null;
     var estado  = dif === null ? 'nd' : Math.abs(dif) <= 0.5 ? 'ok' : dif > 0 ? 'sobrante' : 'faltante';
     return { cod:c, nom:(articulos[c]&&articulos[c].nombre)||'',
-             si:si, ing:ing, ventas:propVentas, teorico:teorico, real:real, dif:dif, estado:estado };
+             si:si, ing:ing, desp:desp, ventas:propVentas, teorico:teorico, real:real, dif:dif, estado:estado };
   });
 
   // Also compute global totals row
@@ -3591,7 +3655,7 @@ function toggleDespachosUI() {
   var pedCard = document.getElementById('pedidos-fab-card');
   if(pedCard) {
     pedCard.style.display = isFab ? '' : 'none';
-    if(isFab) loadPedidos();
+    if(isFab && !window._pedLoaded) loadPedidos();
   }
 }
 
@@ -3745,12 +3809,26 @@ var DATA_pedidos = [];
 var pedidosReadIds = [];
 
 function loadPedidos() {
+  window._pedLoaded = true;
   return fbGet('pedidos').then(function(data) {
     if(data) {
       DATA_pedidos = Object.values(data).sort(function(a,b){return b.ts-a.ts;});
+      Object.keys(data).forEach(function(k){ if(k>pedLastKey) pedLastKey=k; });
     }
     renderPedidosFab();
   }).catch(function(){});
+}
+function syncPedidosNew() {
+  var q='orderBy='+encodeURIComponent('"$key"')+(pedLastKey?'&startAt='+encodeURIComponent('"'+pedLastKey+'"'):'');
+  return fbGetQ('pedidos',q).then(function(pd){
+    if(!pd||pd.error) return;
+    var have={}; DATA_pedidos.forEach(function(p){have[p.ts]=1;});
+    Object.keys(pd).forEach(function(k){
+      if(k>pedLastKey) pedLastKey=k;
+      if(pd[k] && !have[pd[k].ts]) DATA_pedidos.push(pd[k]);
+    });
+    DATA_pedidos.sort(function(a,b){return b.ts-a.ts;});
+  });
 }
 
 function getPedidosReadIds() {
