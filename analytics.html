@@ -425,6 +425,7 @@ function normalize(){
   EV.fix = [];
   const kgOf = h=>{
     const u=h.pesoTotal/h.cant;
+    if(h.tipo==='DESPERDICIO' && u<100) return h.pesoTotal;   // puede ser una parte de la bacha/balde
     if(okU(u,h.recip)) return h.pesoTotal;
     let kg, motivo;
     if(u>=100 && okU(u/1000,h.recip)){ kg=h.pesoTotal/1000; motivo='Cargado en gramos → ÷1000'; }
@@ -443,6 +444,12 @@ function normalize(){
     }
     else if(LOCALES.includes(h.loc) && h.tipo==='EGRESO') EV.cons.push(mk(h,h.loc));
   });
+  // Movimientos crudos (para reconstruir stock a una fecha) y merma (DESPERDICIO en locales)
+  EV.raw = H.map(h=>({ts:h.ts,loc:h.loc,tipo:h.tipo,cod:h.cod,recip:h.recip,cant:h.cant,kg:h.pesoTotal,origen:h.origen||''}));
+  // DESPERDICIO de MOSTRADOR: ese helado ya contó como egreso → se resta del consumo del sabor.
+  // DESPERDICIO de CÁMARA (o sin origen, registros viejos): no era consumo, solo merma.
+  EV.merma = H.filter(h=>LOCALES.includes(h.loc)&&h.tipo==='DESPERDICIO').map(h=>Object.assign(mk(h,h.loc),{motivo:h.motivo||'Sin motivo',origen:h.origen==='MOSTRADOR'?'MOSTRADOR':'CAMARA'}));
+  EV.merma.forEach(m=>{ if(m.origen==='MOSTRADOR') EV.cons.push({ts:m.ts,loc:m.loc,cod:m.cod,kg:-m.kg,u:0,b:0,v:0,merma:1}); });
   // OSAN registrados sin egreso par (por si acaso)
   H.forEach(h=>{ if(h.loc==='osan' && h.tipo==='INGRESO' && !usados.has(h)){ EV.desp.push(mk(h,'osan')); EV.cons.push(mk(h,'osan')); }});
   // Pedidos de locales
@@ -691,7 +698,7 @@ function consumos(){
   LOCALES.forEach(l=>{
     const src=EV.cons.filter(e=>!e.pl&&e.loc===l); last[l]={};
     const first=src.length?src[0].ts:now, dW=Math.max(1,Math.min(W,(now-first)/DAY));
-    src.forEach(e=>{last[l][e.cod]=e.ts; if(e.ts>=now-W*DAY){const o=C[l][e.cod]=C[l][e.cod]||{hoy:0,temp:0};o.hoy+=e.kg/dW;}});
+    src.forEach(e=>{if(e.kg>0) last[l][e.cod]=e.ts; if(e.ts>=now-W*DAY){const o=C[l][e.cod]=C[l][e.cod]||{hoy:0,temp:0};o.hoy+=e.kg/dW;}});
     Object.keys(tP).forEach(c=>{const o=C[l][c]=C[l][c]||{hoy:0,temp:0};o.temp=tP[c]*fac[l];});
     Object.keys(C[l]).forEach(c=>{const f=C.fabrica[c]=C.fabrica[c]||{hoy:0,temp:0};f.hoy+=C[l][c].hoy;f.temp+=C[l][c].temp;});
   });
@@ -764,6 +771,17 @@ function rRot(){
     {t:'Días sin salida',sv:r=>r.sin??9999,f:r=>r.sin==null?'—':r.sin}],rows,{key:'rot'});
 }
 
+/* Stock de un lugar a una fecha T: stock actual − ingresos posteriores a T + egresos/desperdicios posteriores a T
+   (misma aritmética que usa la app de stock). */
+function stockAt(l,T){
+  const cur={}; Object.entries((RAW.stock||{})[l]||{}).forEach(([c,v])=>cur[c]={kg:(+v.kg_bachas||0)+(+v.kg_baldes||0),nb:+v.bachas||0,nv:+v.baldes||0});
+  (EV.raw||[]).forEach(m=>{ if(m.loc!==l||m.ts<=T) return;
+    const sg = m.tipo==='INGRESO'?-1:(m.tipo==='EGRESO'||(m.tipo==='DESPERDICIO'&&m.origen!=='MOSTRADOR'))?1:0; if(!sg) return;
+    const o=cur[m.cod]=cur[m.cod]||{kg:0,nb:0,nv:0}; o.kg+=sg*(m.kg||0); if(m.recip==='BACHA') o.nb+=sg*(m.cant||0); else if(m.recip==='BALDE') o.nv+=sg*(m.cant||0); });
+  let kg=0,nb=0,nv=0,ns=0; Object.values(cur).forEach(o=>{const k=Math.max(0,o.kg);kg+=k;nb+=Math.max(0,o.nb);nv+=Math.max(0,o.nv);if(k>0.05)ns++;});
+  return {kg,nb,nv,ns};
+}
+
 /* ═══════════ INFORME DE CIERRE ═══════════ */
 const MESL=['enero','febrero','marzo','abril','mayo','junio','julio','agosto','septiembre','octubre','noviembre','diciembre'];
 const money=n=>(n==null||isNaN(n))?'—':'$ '+fmt(n,0);
@@ -823,10 +841,19 @@ function rInforme(){
   const conStock=new Set(); LL.forEach(l=>Object.entries((RAW.stock||{})[l]||{}).forEach(([c,v])=>{if((+v.kg_bachas||0)+(+v.kg_baldes||0)>0)conStock.add(c);}));
   const quietos=[...conStock].filter(c=>!sM[c]).map(nombre).sort();
   const fixN=fixList().filter(f=>f.ts>=a&&f.ts<=b).length;
-  // Stock actual (foto al momento de emitir el informe)
+  // Stock al cierre del mes (reconstruido) — si el mes está en curso, stock actual
   const STL=['puerto','gorlero','labarra','fabrica'];
-  const cons28=l=>{const src=l==='fabrica'?EV.cons.filter(e=>!e.pl&&LL.includes(e.loc)):EV.cons.filter(e=>!e.pl&&e.loc===l);return src.filter(e=>e.ts>=hoy-28*DAY).reduce((x,e)=>x+e.kg,0)/28;};
-  const stk=STL.map(l=>{const o=(RAW.stock||{})[l]||{};let kg=0,nb=0,nv=0,ns=0;Object.values(o).forEach(v=>{const k=(+v.kg_bachas||0)+(+v.kg_baldes||0);kg+=k;nb+=+v.bachas||0;nv+=+v.baldes||0;if(k>0)ns++;});const cd=cons28(l);return {l,kg,nb,nv,ns,cd,cob:cd>0?kg/cd:null};});
+  const enCurso=b>=hoy, Tst=enCurso?hoy:b;
+  const rawIni=(EV.raw||[]).length?Math.min(...EV.raw.map(m=>m.ts)):hoy, stkOK=Tst>=rawIni;
+  const consMes=l=>{const src=l==='fabrica'?EV.cons.filter(e=>!e.pl&&LL.includes(e.loc)):EV.cons.filter(e=>!e.pl&&e.loc===l);return src.filter(e=>e.ts>=a&&e.ts<=b).reduce((x,e)=>x+e.kg,0)/diasData;};
+  const stk=STL.map(l=>{const x=stockAt(l,Tst);const cd=consMes(l);return Object.assign({l,cd,cob:cd>0?x.kg/cd:null},x);});
+  const stkFecha=new Date(Tst).toLocaleDateString('es-UY',{day:'numeric',month:'long',year:'numeric'});
+  // Merma del mes
+  const mM=(EV.merma||[]).filter(e=>e.ts>=a&&e.ts<=b), mT=mM.reduce((x,e)=>x+e.kg,0);
+  const mLoc=LL.map(l=>{const ml=mM.filter(e=>e.loc===l),kg=ml.reduce((x,e)=>x+e.kg,0),mo=ml.filter(e=>e.origen==='MOSTRADOR').reduce((x,e)=>x+e.kg,0), c=loc.find(r=>r.l===l).kg;return {l,kg,mo,ca:kg-mo,pct:(c+kg)>0?kg/(c+kg)*100:0,n:ml.length};});
+  const mMo=mLoc.reduce((x,r)=>x+r.mo,0), mCa=mT-mMo;
+  const mSab={}; mM.forEach(e=>mSab[e.cod]=(mSab[e.cod]||0)+e.kg); const mTop=Object.entries(mSab).sort((x,y2)=>y2[1]-x[1]).slice(0,5);
+  const mMot={}; mM.forEach(e=>mMot[e.motivo]=(mMot[e.motivo]||0)+e.kg);
   const stkT=stk.reduce((x,r)=>x+r.kg,0), stkLoc=stk.filter(r=>r.l!=='fabrica').reduce((x,r)=>x+r.kg,0);
   // $
   const hayV=loc.some(r=>r.ventas), V=loc.reduce((s,r)=>s+(r.ventas||0),0), TK=loc.reduce((s,r)=>s+(r.tickets||0),0);
@@ -842,7 +869,8 @@ function rInforme(){
   if(tot>0) bl.push(`Puerto concentra el <b>${fmt(loc[0].kg/tot*100,0)}%</b> del consumo; Gorlero ${fmt(loc[1].kg/tot*100,0)}% y La Barra ${fmt(loc[2].kg/tot*100,0)}%.`+(best?` Mayor crecimiento: <b>${NAMES[best.l]}</b> (${pctPlain(best.kg,best.prev)}).`:''));
   if(rank.length) bl.push(`Sabor más vendido: <b>${esc(rank[0].nom)}</b> (${fmt(rank[0].kg,0)} kg, ${fmt(rank[0].share,0)}%). El top 3 suma el ${fmt(rank.slice(0,3).reduce((s,r)=>s+r.share,0),0)}% del consumo.`);
   bl.push(`Fábrica produjo <b>${fmt(prod,0)} kg</b>`+(pctPlain(prod,prodP)?` (${pctPlain(prod,prodP)} vs ${pTxt})`:'')+` y despachó <b>${fmt(despT,0)} kg</b>`+(despBy.osan?`, de los cuales ${fmt(despBy.osan,0)} kg a OSAN`:'')+'.');
-  bl.push(`Stock actual de helado: <b>${fmt(stkT,0)} kg</b> (locales ${fmt(stkLoc,0)} kg · Fábrica ${fmt(stk[3].kg,0)} kg)`+(stk[3].cob?`; Fábrica cubre <b>${fmt(stk[3].cob,1)} días</b> del consumo actual de los locales`:'')+'.');
+  if(stkOK) bl.push(`Stock ${enCurso?'actual':'al cierre'} de helado: <b>${fmt(stkT,0)} kg</b> (locales ${fmt(stkLoc,0)} kg · Fábrica ${fmt(stk[3].kg,0)} kg)`+(stk[3].cob?`; Fábrica cubre <b>${fmt(stk[3].cob,1)} días</b> del consumo de los locales`:'')+'.');
+  if(mT>0) bl.push(`Merma (desperdicio): <b>${fmt(mT,1)} kg</b> = ${fmt(mT/(tot+mT)*100,1)}% de lo que salió de cámara`+(mTop[0]?`; más merma en <b>${esc(nombre(mTop[0][0]))}</b> (${fmt(mTop[0][1],1)} kg)`:'')+'.');
   if(hayV) bl.push(`Ventas: <b>${money(V)}</b>`+(TK?` en ${fmt(TK,0)} tickets (ticket promedio ${money(V/TK)})`:'')+(tot?` · ${money(V/tot)} por kg`:'')+'.');
   if(hayP&&hayV){const peor=[...loc].filter(r=>r.personal&&r.ventas).sort((x,y2)=>y2.personal/y2.ventas-x.personal/x.ventas)[0];
     bl.push(`Nómina: <b>${money(PE)}</b> = <b>${fmt(PE/V*100,1)}%</b> de las ventas`+(tot?` (${money(PE/tot)} por kg vendido)`:'')+(peor?`. Mayor peso en <b>${NAMES[peor.l]}</b> (${fmt(peor.personal/peor.ventas*100,1)}%)`:'')+'.');}
@@ -878,13 +906,21 @@ function rInforme(){
         <tr><td class="l">Pedido por locales</td><td>${pedT?fmt(pedT,0)+' kg':'—'}</td><td>${pedT?'cumplimiento '+fmt(despLoc/pedT*100,0)+'%':''}</td></tr>
         <tr><td class="l">Despachos a OSAN</td><td>${fmt(despBy.osan||0,0)} kg</td><td>${despT?fmt((despBy.osan||0)/despT*100,0)+'% del total':''}</td></tr>
       </tbody></table><div class="note">${destTxt?'Destinos: '+destTxt+'.':''} Kg de pedidos estimados con el peso promedio de cada sabor.</div></div></div>
-    </div><div class="sec"><h2>4. Stock actual de helado</h2>
+    </div><div class="sec"><h2>4. Stock de helado ${enCurso?'actual':'al cierre'} (${stkFecha})</h2>${stkOK?'':'<div class="note">No hay registros de la app para esa fecha.</div>'}
     <div class="two"><div class="chartbox"><canvas id="rcStk"></canvas></div>
       <div><table><thead><tr><th class="l">Lugar</th><th>Kg</th><th>Bachas</th><th>Baldes</th><th>Sabores</th><th>Cobertura</th></tr></thead><tbody>
         ${stk.map(r=>`<tr><td class="l">${NAMES[r.l]}</td><td><b>${fmt(r.kg,0)}</b></td><td>${fmt(r.nb)}</td><td>${fmt(r.nv)}</td><td>${r.ns}</td><td>${r.cob!=null?fmt(r.cob,1)+' días':'—'}</td></tr>`).join('')}
         <tr><td class="l"><b>Total</b></td><td><b>${fmt(stkT,0)}</b></td><td>${fmt(stk.reduce((x,r)=>x+r.nb,0))}</td><td>${fmt(stk.reduce((x,r)=>x+r.nv,0))}</td><td></td><td></td></tr>
       </tbody></table>
-      <div class="note">Foto del stock en la app al ${new Date(hoy).toLocaleDateString('es-UY',{day:'numeric',month:'long',year:'numeric'})} (${new Date(hoy).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'})} h). Cobertura = stock ÷ consumo diario de los últimos 28 días; Fábrica contra la suma de los 3 locales.</div></div></div>
+      <div class="note">${enCurso?'Stock actual en la app ('+new Date(hoy).toLocaleTimeString('es-UY',{hour:'2-digit',minute:'2-digit'})+' h).':'Stock al cierre del '+stkFecha+', reconstruido desde el stock actual descontando los movimientos posteriores.'} Cobertura = stock ÷ consumo diario promedio del mes; Fábrica contra la suma de los 3 locales.</div></div></div>
+    </div><div class="sec"><h2>5. Merma (desperdicio)</h2>
+    ${mT>0?`<div class="two"><div><table><thead><tr><th class="l">Local</th><th>Mostrador</th><th>Cámara</th><th>Total kg</th><th>% de lo que salió</th></tr></thead><tbody>
+        ${mLoc.map(r=>`<tr><td class="l">${NAMES[r.l]}</td><td>${fmt(r.mo,1)}</td><td>${fmt(r.ca,1)}</td><td><b>${fmt(r.kg,1)}</b></td><td>${fmt(r.pct,1)}%</td></tr>`).join('')}
+        <tr><td class="l"><b>Total</b></td><td>${fmt(mMo,1)}</td><td>${fmt(mCa,1)}</td><td><b>${fmt(mT,1)}</b></td><td>${fmt(mT/(tot+mT)*100,1)}%</td></tr></tbody></table>
+        <div class="note">Motivos: ${Object.entries(mMot).sort((x,y2)=>y2[1]-x[1]).map(([k2,v])=>esc(k2)+' '+fmt(v,1)+' kg').join(' · ')}</div></div>
+      <div><table><thead><tr><th class="l">Sabores con más merma</th><th>Kg</th></tr></thead><tbody>${mTop.map(([c,v])=>`<tr><td class="l">${esc(nombre(c))}</td><td>${fmt(v,1)}</td></tr>`).join('')}</tbody></table></div></div>
+      <div class="note">Mostrador = helado tirado que ya había salido de cámara: se descuenta del consumo del sabor. Cámara = helado que se arruinó en cámara: no cuenta como consumo. Ninguno entra en el ranking de sabores.</div>`
+    :`<div class="note">No se registraron desperdicios en el mes. Para medir la merma: lo que se tira del mostrador se registra en la app de stock con 🗑 Desperdicio · Mostrador (pesando lo que se tira); la reposición que se saca de cámara sigue siendo un Egreso normal.</div>`}
     </div>${C.comentario?`<div class="sec"><h2>Comentarios</h2><div class="com">${esc(C.comentario)}</div></div>`:''}
     <div class="note" style="margin-top:24px;border-top:1px solid #ddd;padding-top:8px">Fuente: app de control de stock Il Porto (Firebase) · Il Porto Analytics.</div>`;
   // gráficos (colores fijos claros para el informe)
@@ -902,7 +938,7 @@ function rInforme(){
   mk('rcTop',{type:'bar',data:{labels:t10.map(r=>r.nom),datasets:[{label:'Kg',data:t10.map(r=>r.kg),backgroundColor:RS.s1,borderRadius:4}]},
     options:base({indexAxis:'y',plugins:{legend:{display:false},title:{display:true,text:'Top 10 sabores (kg)',color:'#111',align:'start'},tooltip:{callbacks:{label:c=>' '+fmt(c.parsed.x,0)+' kg'}}},scales:{x:{grid:{color:'#eee'},ticks:{color:'#555'},beginAtZero:true},y:{grid:{display:false},ticks:{color:'#333'}}}})});
   mk('rcStk',{type:'bar',data:{labels:stk.map(r=>NAMES[r.l]),datasets:[{label:'Stock (kg)',data:stk.map(r=>r.kg),backgroundColor:stk.map(r=>r.l==='fabrica'?'#7a7870':RS.s1),borderRadius:4}]},
-    options:base({plugins:{legend:{display:false},title:{display:true,text:'Stock actual (kg)',color:'#111',align:'start'},tooltip:{callbacks:{label:c=>' '+fmt(c.parsed.y,0)+' kg'}}},scales:{x:{grid:{display:false},ticks:{color:'#555'}},y:{grid:{color:'#eee'},ticks:{color:'#555'},beginAtZero:true}}})});
+    options:base({plugins:{legend:{display:false},title:{display:true,text:(enCurso?'Stock actual':'Stock al cierre')+' (kg)',color:'#111',align:'start'},tooltip:{callbacks:{label:c=>' '+fmt(c.parsed.y,0)+' kg'}}},scales:{x:{grid:{display:false},ticks:{color:'#555'}},y:{grid:{color:'#eee'},ticks:{color:'#555'},beginAtZero:true}}})});
   const wk=buckets(a,Math.min(b,hoy),'sem'); const ws=arr=>{const o={};arr.forEach(e=>{const kk=weekKey(e.ts);o[kk]=(o[kk]||0)+e.kg;});return wk.map(w=>o[w]||0);};
   mk('rcFab',{type:'bar',data:{labels:wk.map(weekLbl),datasets:[{label:'Producido',data:ws(EV.prod.filter(e=>e.ts>=a&&e.ts<=b)),backgroundColor:RS.s1,borderRadius:4},{label:'Despachado',data:ws(desp),backgroundColor:RS.s3,borderRadius:4}]},
     options:base({plugins:{legend:{labels:{color:'#444',boxWidth:10,boxHeight:10,usePointStyle:true}},title:{display:true,text:'Fábrica por semana (kg)',color:'#111',align:'start'},tooltip:{callbacks:{label:c=>' '+c.dataset.label+': '+fmt(c.parsed.y,0)+' kg'}}},scales:{x:{grid:{display:false},ticks:{color:'#555'}},y:{grid:{color:'#eee'},ticks:{color:'#555'},beginAtZero:true}}})});

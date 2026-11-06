@@ -534,6 +534,12 @@ tbody tr:last-child td{border:none}
               <div class="pill" id="pill-des" onclick="setTipo('DESPERDICIO')">🗑 Desperdicio</div>
             </div>
             <div id="motivo-wrap" style="display:none;margin-top:.5rem">
+              <label>¿De dónde se tira?</label>
+              <select id="inp-origen" style="width:100%;margin-bottom:.5rem" onchange="var h=document.getElementById('origen-hint');if(h)h.textContent=this.value==='MOSTRADOR'?'Helado que ya estaba en el mostrador (ya salió de cámara con un egreso). Pesá lo que tirás. NO descuenta stock.':'Helado que se arruinó en la cámara. Descuenta del stock.';">
+                <option value="MOSTRADOR">Mostrador (ya había salido de cámara)</option>
+                <option value="CAMARA">Cámara (descuenta stock)</option>
+              </select>
+              <div id="origen-hint" style="font-size:.72rem;opacity:.75;margin:-.3rem 0 .5rem">Helado que ya estaba en el mostrador (ya salió de cámara con un egreso). Pesá lo que tirás. NO descuenta stock.</div>
               <label>Motivo del desperdicio</label>
               <select id="inp-motivo" style="width:100%">
                 <option value="Arenoso">Arenoso</option>
@@ -1336,7 +1342,7 @@ function syncHistNew(){
 }
 function fbPush(p,d){return fetch(fbUrl(p),{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)}).catch(function(e){console.error('fbPush:',e);});}
 function saveStock(loc,cod){var d=(state[loc]&&state[loc].stock[cod])||{bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};return fbSet('stock/'+loc+'/'+cod,d);}
-function saveHistorial(h){histSigs[histSig(h)]=1;return fbPush('historial',{ts:h.ts||Date.now(),fecha:h.fecha||'',hora:h.hora||'',loc:h.loc,usuario:h.usuario||'—',cod:String(h.cod),tipo:h.tipo,recip:h.recip,cant:h.cant||1,pesoTotal:h.pesoTotal||0,pesoUnit:h.pesoUnit||0,nom:h.nom||'',motivo:h.motivo||''});}
+function saveHistorial(h){histSigs[histSig(h)]=1;return fbPush('historial',{ts:h.ts||Date.now(),fecha:h.fecha||'',hora:h.hora||'',loc:h.loc,usuario:h.usuario||'—',cod:String(h.cod),tipo:h.tipo,recip:h.recip,cant:h.cant||1,pesoTotal:h.pesoTotal||0,pesoUnit:h.pesoUnit||0,nom:h.nom||'',motivo:h.motivo||'',origen:h.origen||''});}
 function saveLimitesDB(loc,cod){var l=(state[loc]&&state[loc].limits[String(cod)])||{min_b:1,max_b:12,min_v:1,max_v:12};return fbSet('limites/'+loc+'/'+cod,l);}
 function saveArticuloDB(cod,nombre){return fbSet('articulos/'+cod,{nombre:nombre||''});}
 function saveDespacho(d){return fbPush('despachos',d);}
@@ -1518,6 +1524,10 @@ function registrar() {
   if(!peso||peso<=0) { toast('Ingresá un peso válido','err'); return; }
   if(cant<1)    { toast('La cantidad debe ser al menos 1','err'); return; }
 
+  // Desperdicio de MOSTRADOR: el helado ya salió de cámara con un egreso → no se toca el stock
+  const origenDesp = curTipo==='DESPERDICIO' ? ((document.getElementById('inp-origen')||{}).value||'CAMARA') : '';
+  const tocaStock  = !(curTipo==='DESPERDICIO' && origenDesp==='MOSTRADOR');
+
   // Init stock if new code
   if(!state[curLoc].stock[cod]) state[curLoc].stock[cod]={bachas:0,baldes:0,kg_bachas:0,kg_baldes:0};
 
@@ -1525,12 +1535,14 @@ function registrar() {
   const mult = curTipo==='INGRESO'?1:-1;
   const base = Math.floor(peso/cant*1000)/1000;
 
-  if(curRecip==='BACHA'){
-    s.bachas    = Math.max(0, s.bachas + mult*cant);
-    s.kg_bachas = parseFloat((s.kg_bachas + peso*mult).toFixed(3));
-  } else {
-    s.baldes    = Math.max(0, s.baldes + mult*cant);
-    s.kg_baldes = parseFloat((s.kg_baldes + peso*mult).toFixed(3));
+  if(tocaStock){
+    if(curRecip==='BACHA'){
+      s.bachas    = Math.max(0, s.bachas + mult*cant);
+      s.kg_bachas = parseFloat((s.kg_bachas + peso*mult).toFixed(3));
+    } else {
+      s.baldes    = Math.max(0, s.baldes + mult*cant);
+      s.kg_baldes = parseFloat((s.kg_baldes + peso*mult).toFixed(3));
+    }
   }
 
   const now = new Date();
@@ -1545,13 +1557,13 @@ function registrar() {
     cod, tipo:curTipo, recip:curRecip, cant, pesoTotal:peso, pesoUnit:base,
     nom: articulos[cod]?.nombre||''
   };
-  if(curTipo==='DESPERDICIO') entry.motivo = (document.getElementById('inp-motivo')||{}).value||'';
+  if(curTipo==='DESPERDICIO'){ entry.motivo = (document.getElementById('inp-motivo')||{}).value||''; entry.origen = origenDesp; }
   state[curLoc].history.unshift(entry);
   if(state[curLoc].history.length>100) state[curLoc].history.pop();
   globalHistory.unshift(entry);
 
   save();
-  saveStock(curLoc, cod);
+  if(tocaStock) saveStock(curLoc, cod);
   saveHistorial(entry);
 
   var signR = curTipo==='INGRESO'?'+':'-';
@@ -1559,7 +1571,7 @@ function registrar() {
   showConfirmModal(
     curTipo==='INGRESO'?'✅':(curTipo==='DESPERDICIO'?'🗑':'📤'),
     (curTipo==='DESPERDICIO'?'Desperdicio':curTipo)+' registrado',
-    icoR+' '+cant+' '+(curRecip==='BACHA'?'bacha':'balde')+'(s) · '+peso.toFixed(3)+' kg · COD '+cod
+    icoR+' '+cant+' '+(curRecip==='BACHA'?'bacha':'balde')+'(s) · '+peso.toFixed(3)+' kg · COD '+cod+(curTipo==='DESPERDICIO'?(origenDesp==='MOSTRADOR'?' · Mostrador (no descuenta stock)':' · Cámara'):'')
   );
 
   document.getElementById('inp-cod').value='';
@@ -1649,7 +1661,7 @@ function renderHist() {
     <div class="hist-row">
       <span class="mono" style="color:var(--c1)">${h.cod}</span>
       <span style="color:var(--muted2);font-size:.78rem">${h.recip==='BACHA'?'🫙':'🪣'} ×${h.cant||1}</span>
-      <span class="hist-badge ${h.tipo==='INGRESO'?'b-ing':'b-egr'}" title="${h.motivo||''}">${h.tipo==='INGRESO'?'+':(h.tipo==='DESPERDICIO'?'🗑':'-')}</span>
+      <span class="hist-badge ${h.tipo==='INGRESO'?'b-ing':'b-egr'}" title="${(h.origen==='MOSTRADOR'?'Mostrador · ':h.origen==='CAMARA'?'Cámara · ':'')+(h.motivo||'')}">${h.tipo==='INGRESO'?'+':(h.tipo==='DESPERDICIO'?'🗑':'-')}</span>
       <span class="mono" style="font-size:.79rem">${(h.pesoTotal||h.peso||0).toFixed(3)}kg</span>
     </div>`).join('');
 }
@@ -2196,7 +2208,7 @@ function initCierre() {
   cierreData.ingresos = ingMap;
   var despMap = {};
   globalHistory.filter(function(h) {
-    if (h.loc !== loc || h.tipo !== 'DESPERDICIO' || !h.fecha) return false;
+    if (h.loc !== loc || h.tipo !== 'DESPERDICIO' || h.origen === 'MOSTRADOR' || !h.fecha) return false;
     var fp = h.fecha.split('/');
     return fp[2] === year && fp[1] === month;
   }).forEach(function(h) { var c = String(h.cod); despMap[c] = (despMap[c]||0) + (h.pesoTotal||0); });
